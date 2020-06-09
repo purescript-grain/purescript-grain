@@ -28,9 +28,9 @@ jobs:
       uses: actions/cache@v1
       with:
         path: bower_components
-        key: ${{ runner.os }}-bower-${{ hashFiles('bower.json') }}
+        key: ${{ runner.os }}-purs-${{ hashFiles('bower.json') }}
         restore-keys: |
-          ${{ runner.os }}-bower-
+          ${{ runner.os }}-purs-
 
     - name: Install dependencies
       run: npm ci
