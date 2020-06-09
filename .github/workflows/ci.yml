@@ -20,7 +20,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: ~/.npm
-        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+        key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
         restore-keys: |
           ${{ runner.os }}-npm-
 
@@ -28,7 +28,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: bower_components
-        key: ${{ runner.os }}-bower-${{ hashFiles('**/bower.json') }}
+        key: ${{ runner.os }}-bower-${{ hashFiles('bower.json') }}
         restore-keys: |
           ${{ runner.os }}-bower-
 
