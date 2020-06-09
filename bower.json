@@ -1,0 +1,36 @@
+{
+  "name": "purescript-grain",
+  "license": "MIT",
+  "homepage": "https://github.com/purescript-grain/purescript-grain",
+  "authors": [
+    "Shinya Takahashi <s.takahashi313@gmail.com>"
+  ],
+  "description": "A UI library with easy and flexible state management inspired by Recoil.js and React Hooks",
+  "keywords": [
+    "purescript",
+    "virtual-dom",
+    "ui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/purescript-grain/purescript-grain"
+  },
+  "moduleType": [
+    "node"
+  ],
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-foreign-object": "^2.0.3",
+    "purescript-safely": "^4.0.1",
+    "purescript-unsafe-reference": "^3.0.1",
+    "purescript-web-html": "^2.3.0"
+  },
+  "devDependencies": {
+    "purescript-test-unit": "^15.0.0"
+  }
+}
