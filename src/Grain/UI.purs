@@ -31,7 +31,7 @@ import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain)
 import Grain.Render (Render, runRender)
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
-import Grain.Styler (Styler, createStyler)
+import Grain.Styler (Styler, mountStyler, unmountStyler)
 import Grain.UI.Diff (class HasKey, diff)
 import Grain.UI.Element (allocElement, updateElement)
 import Grain.UI.Util (childNode, createText_, raf)
@@ -76,6 +76,7 @@ patchUI Nothing (UI ref) = do
     , nodeIndex: 0
     , moveIndex: Nothing
     }
+  unmountStyler r.context.styler
 patchUI (Just vnode) (UI ref) = do
   archive <- createArchive vnode
   r <- flip modify ref \r -> r { history = archive : r.history }
@@ -99,7 +100,7 @@ createContext :: Effect UIContext
 createContext =
   { store: _, styler: _, isSvg: false }
     <$> createStore
-    <*> createStyler
+    <*> mountStyler
 
 
 
