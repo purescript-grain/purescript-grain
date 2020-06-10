@@ -45,10 +45,7 @@ import Web.Event.Event (Event)
 
 -- | The type of UI state.
 newtype UI = UI
-  { parentNode :: Node
-  , context :: UIContext
-  , history :: Array Archive
-  }
+  (Ref { parentNode :: Node, context :: UIContext, history :: Array Archive })
 
 -- | Mount a `VNode` to a parent node.
 mountUI :: VNode -> Node -> Effect UI
@@ -62,27 +59,33 @@ mountUI vnode parentNode = do
     , nodeIndex: 0
     , moveIndex: Nothing
     }
-  pure $ UI
+  UI <$> new
     { parentNode
     , context
     , history: [ archive ]
     }
 
 -- | Patch a `VNode` of parent node.
-patchUI :: Maybe VNode -> UI -> Effect (Maybe UI)
-patchUI maybeVNode (UI r) = do
-  maybeArchive <- case maybeVNode of
-                    Nothing -> pure Nothing
-                    Just vnode -> Just <$> createArchive vnode
+patchUI :: Maybe VNode -> UI -> Effect Unit
+patchUI Nothing (UI ref) = do
+  r <- read ref
   void $ flip runReaderT r.context $ patch
     { current: r.history !! 0
-    , next: maybeArchive
+    , next: Nothing
     , parentNode: r.parentNode
     , nodeIndex: 0
     , moveIndex: Nothing
     }
-  pure $ maybeArchive <#> \archive ->
-    UI r { history = archive : r.history }
+patchUI (Just vnode) (UI ref) = do
+  archive <- createArchive vnode
+  r <- flip modify ref \r -> r { history = archive : r.history }
+  void $ flip runReaderT r.context $ patch
+    { current: r.history !! 1
+    , next: r.history !! 0
+    , parentNode: r.parentNode
+    , nodeIndex: 0
+    , moveIndex: Nothing
+    }
 
 
 
