@@ -1,7 +1,7 @@
 module Grain.UI
   ( UI
   , mountUI
-  , updateUI
+  , patchUI
   , VNode
   , key
   , fingerprint
@@ -50,8 +50,8 @@ newtype UI = UI
   }
 
 -- | Mount a `VNode` to a parent node.
-mountUI :: Node -> VNode -> Effect UI
-mountUI node vnode = do
+mountUI :: VNode -> Node -> Effect UI
+mountUI vnode node = do
   context <- createContext
   archive <- createArchive vnode
   void $ flip runReaderT context $ patch
@@ -66,20 +66,21 @@ mountUI node vnode = do
     , history: [ archive ]
     }
 
--- | Update a `VNode` of parent node.
-updateUI :: Node -> VNode -> UI -> Effect UI
-updateUI node vnode (UI r) = do
-  archive <- createArchive vnode
+-- | Patch a `VNode` of parent node.
+patchUI :: UI -> Maybe VNode -> Node -> Effect (Maybe UI)
+patchUI (UI r) maybeVNode node = do
+  maybeArchive <- case maybeVNode of
+                    Nothing -> pure Nothing
+                    Just vnode -> Just <$> createArchive vnode
   void $ flip runReaderT r.context $ patch
     { current: r.history !! 0
-    , next: Just archive
+    , next: maybeArchive
     , parentNode: node
     , nodeIndex: 0
     , moveIndex: Nothing
     }
-  pure $ UI r
-    { history = archive : r.history
-    }
+  pure $ maybeArchive <#> \archive ->
+    UI r { history = archive : r.history }
 
 
 

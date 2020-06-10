@@ -22,7 +22,7 @@ main = do
   case maybeEl of
     Nothing -> pure unit
     Just el ->
-      void $ mountUI (toNode el) view
+      void $ mountUI view $ toNode el
 
 data Now = Now
 

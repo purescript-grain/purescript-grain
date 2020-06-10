@@ -8,4 +8,4 @@ module Grain
 import Grain.Class (class Grain)
 import Grain.Render (Render, useGlobalUpdater, useGlobalValue, useLocalState)
 import Grain.TypeRef (fromConstructor)
-import Grain.UI (UI, VNode, mountUI, updateUI)
+import Grain.UI (UI, VNode, mountUI, patchUI)
