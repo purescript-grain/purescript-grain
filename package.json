@@ -4,7 +4,7 @@
   "scripts": {
     "postinstall": "bower i",
     "bower": "bower",
-    "build": "pulp build",
+    "watch": "pulp --watch build",
     "clean": "rm -rf output",
     "test": "pulp test",
     "pulp:version": "pulp version",
