@@ -1,16 +1,27 @@
 module Grain.Class
-  ( class Grain
+  ( GProxy(..)
+  , grain
+  , grainWithKey
+  , class Grain
   , initialState
   , typeRefOf
   ) where
 
 import Prelude
 
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Grain.TypeRef (TypeRef)
 
--- | The representation of type as state key and type of state to it.
--- | This type class uses `Show` and `TypeRef` for state key.
-class Show k <= Grain k a | k -> a where
-  initialState :: k -> Effect a
-  typeRefOf :: k -> TypeRef
+data GProxy a = GProxy (Maybe String)
+
+grain :: forall a. GProxy a
+grain = GProxy Nothing
+
+grainWithKey :: forall a. String -> GProxy a
+grainWithKey = GProxy <<< Just
+
+-- | Representation of a partial state of application state.
+class Grain a where
+  initialState :: GProxy a -> Effect a
+  typeRefOf :: GProxy a -> TypeRef

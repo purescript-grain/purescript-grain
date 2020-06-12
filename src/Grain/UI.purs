@@ -28,7 +28,7 @@ import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Foreign.Object (Object, empty, insert)
-import Grain.Class (class Grain)
+import Grain.Class (class Grain, GProxy)
 import Grain.Render (Render, runRender)
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler, unmountStyler)
@@ -480,28 +480,28 @@ evalComponent componentRef = do
   alloc
   componentNode componentRef
   where
-    selectValue :: forall k a. Grain k a => k -> Store -> Effect a
-    selectValue k store = do
-      subscribeGrain k allocRaf store
+    selectValue :: forall a. Grain a => GProxy a -> Store -> Effect a
+    selectValue proxy store = do
+      subscribeGrain proxy allocRaf store
       flip addComponentUnsubscriber componentRef
-        $ unsubscribeGrain k allocRaf store
-      readGrain k store
+        $ unsubscribeGrain proxy allocRaf store
+      readGrain proxy store
 
-    selectGlobalValue :: forall k a. Grain k a => k -> Effect a
-    selectGlobalValue k =
-      globalStoreFromComponent componentRef >>= selectValue k
+    selectGlobalValue :: forall a. Grain a => GProxy a -> Effect a
+    selectGlobalValue proxy =
+      globalStoreFromComponent componentRef >>= selectValue proxy
 
-    updateGlobalValue :: forall k a. Grain k a => k -> (a -> a) -> Effect Unit
-    updateGlobalValue k f =
-      globalStoreFromComponent componentRef >>= updateGrain k f
+    updateGlobalValue :: forall a. Grain a => GProxy a -> (a -> a) -> Effect Unit
+    updateGlobalValue proxy f =
+      globalStoreFromComponent componentRef >>= updateGrain proxy f
 
-    selectLocalValue :: forall k a. Grain k a => k -> Effect a
-    selectLocalValue k =
-      localStoreFromComponent componentRef >>= selectValue k
+    selectLocalValue :: forall a. Grain a => GProxy a -> Effect a
+    selectLocalValue proxy =
+      localStoreFromComponent componentRef >>= selectValue proxy
 
-    updateLocalValue :: forall k a. Grain k a => k -> (a -> a) -> Effect Unit
-    updateLocalValue k f =
-      localStoreFromComponent componentRef >>= updateGrain k f
+    updateLocalValue :: forall a. Grain a => GProxy a -> (a -> a) -> Effect Unit
+    updateLocalValue proxy f =
+      localStoreFromComponent componentRef >>= updateGrain proxy f
 
     eval =
       componentRender componentRef >>= flip runRender

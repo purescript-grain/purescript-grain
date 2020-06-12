@@ -14,7 +14,7 @@ import Control.Monad.Rec.Class (class MonadRec)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Class (liftEffect)
-import Grain.Class (class Grain)
+import Grain.Class (class Grain, GProxy)
 
 -- | The type of component renderer.
 -- |
@@ -34,10 +34,10 @@ derive newtype instance monadRecRender :: MonadRec Render
 newtype QueryBox = QueryBox Query
 
 type Query =
-  { selectGlobalValue :: forall k a. Grain k a => k -> Effect a
-  , updateGlobalValue :: forall k a. Grain k a => k -> (a -> a) -> Effect Unit
-  , selectLocalValue :: forall k a. Grain k a => k -> Effect a
-  , updateLocalValue :: forall k a. Grain k a => k -> (a -> a) -> Effect Unit
+  { selectGlobalValue :: forall a. Grain a => GProxy a -> Effect a
+  , updateGlobalValue :: forall a. Grain a => GProxy a -> (a -> a) -> Effect Unit
+  , selectLocalValue :: forall a. Grain a => GProxy a -> Effect a
+  , updateLocalValue :: forall a. Grain a => GProxy a -> (a -> a) -> Effect Unit
   }
 
 runRender :: forall a. Render a -> Query -> Effect a
@@ -46,28 +46,36 @@ runRender (Render reader) = runReaderT reader <<< QueryBox
 -- | Listen a state of received key, then return a state.
 -- |
 -- | If the received state is changed, the component will be rerendered.
-useGlobalValue :: forall k a. Grain k a => k -> Render a
-useGlobalValue k = Render do
+useGlobalValue
+  :: forall a
+   . Grain a
+  => GProxy a
+  -> Render a
+useGlobalValue proxy = Render do
   QueryBox query <- ask
   withReaderT (const query)
-    $ liftEffect $ query.selectGlobalValue k
+    $ liftEffect $ query.selectGlobalValue proxy
 
 -- | Get an updater of received key.
-useGlobalUpdater :: forall k a. Grain k a => k -> Render ((a -> a) -> Effect Unit)
-useGlobalUpdater k = Render do
+useGlobalUpdater
+  :: forall a
+   . Grain a
+  => GProxy a
+  -> Render ((a -> a) -> Effect Unit)
+useGlobalUpdater proxy = Render do
   QueryBox query <- ask
-  pure $ query.updateGlobalValue k
+  pure $ query.updateGlobalValue proxy
 
 -- | It is almost same as `useGlobalValue` and `useGlobalUpdater`.
 -- |
 -- | The difference from them is that the state is treated as component local state.
 useLocalState
-  :: forall k a
-   . Grain k a
-  => k
+  :: forall a
+   . Grain a
+  => GProxy a
   -> Render (Tuple a ((a -> a) -> Effect Unit))
-useLocalState k = Render do
+useLocalState proxy = Render do
   QueryBox query <- ask
   withReaderT (const query) do
-    value <- liftEffect $ query.selectLocalValue k
-    pure $ Tuple value $ query.updateLocalValue k
+    value <- liftEffect $ query.selectLocalValue proxy
+    pure $ Tuple value $ query.updateLocalValue proxy
