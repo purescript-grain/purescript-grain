@@ -2,17 +2,13 @@ module State.ItemIds where
 
 import Prelude
 
-import Data.Generic.Rep (class Generic)
-import Data.Generic.Rep.Show (genericShow)
+import Data.Newtype (class Newtype)
 import Grain (class Grain, fromConstructor)
 
-data ItemIds = ItemIds
+newtype ItemIds = ItemIds (Array Int)
 
-derive instance genericItemIds :: Generic ItemIds _
+derive instance newtypeItemIds :: Newtype ItemIds _
 
-instance showItemsIds :: Show ItemIds where
-  show = genericShow
-
-instance grainItemIds :: Grain ItemIds (Array Int) where
-  initialState _ = pure []
+instance grainItemIds :: Grain ItemIds where
+  initialState _ = pure $ ItemIds []
   typeRefOf _ = fromConstructor ItemIds

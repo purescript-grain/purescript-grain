@@ -3,9 +3,10 @@ module Main where
 import Prelude
 
 import Data.Maybe (Maybe(..))
+import Data.Newtype (class Newtype, over)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Grain (class Grain, VNode, fromConstructor, mountUI, useLocalState)
+import Grain (class Grain, VNode, fromConstructor, grain, mountUI, useLocalState)
 import Grain.Markup as H
 import Web.DOM.Element (toNode)
 import Web.DOM.ParentNode (QuerySelector(..), querySelector)
@@ -21,20 +22,21 @@ main = do
     Just el ->
       void $ mountUI view $ toNode el
 
-data Count = Count
+newtype Count = Count Int
 
-instance showCount :: Show Count where
-  show _ = "Show"
+derive newtype instance showCount :: Show Count
 
-instance grainCount :: Grain Count Int where
-  initialState _ = pure 0
+derive instance newtypeCount :: Newtype Count _
+
+instance grainCount :: Grain Count where
+  initialState _ = pure $ Count 0
   typeRefOf _ = fromConstructor Count
 
 view :: VNode
 view = H.component do
-  Tuple count updateCount <- useLocalState Count
-  let increment = updateCount (_ + 1)
-      decrement = updateCount (_ - 1)
+  Tuple count updateCount <- useLocalState (grain :: _ Count)
+  let increment = updateCount $ over Count (_ + 1)
+      decrement = updateCount $ over Count (_ - 1)
   pure $ H.div # H.css containerStyles # H.kids
     [ H.button
         # H.css buttonStyles
