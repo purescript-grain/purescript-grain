@@ -65,7 +65,7 @@ mountUI vnode parentNode = do
     , history: [ archive ]
     }
 
--- | Patch a `VNode` of parent node.
+-- | Patch a `VNode` of UI.
 patchUI :: Maybe VNode -> UI -> Effect Unit
 patchUI Nothing (UI ref) = do
   r <- read ref

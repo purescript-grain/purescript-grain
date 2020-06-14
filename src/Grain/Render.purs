@@ -18,7 +18,7 @@ import Grain.Class (class Grain, GProxy)
 
 -- | The type of component renderer.
 -- |
--- | In this monad, users can declare that they use some states and updaters.
+-- | In this monad, you can declare that you use some states and updaters.
 newtype Render a = Render (ReaderT QueryBox Effect a)
 
 -- Do not derive MonadEffect
@@ -43,9 +43,9 @@ type Query =
 runRender :: forall a. Render a -> Query -> Effect a
 runRender (Render reader) = runReaderT reader <<< QueryBox
 
--- | Listen a state of received key, then return a state.
+-- | Listen a partial global state, then return it.
 -- |
--- | If the received state is changed, the component will be rerendered.
+-- | If the state is changed, the component will be rerendered.
 useGlobalValue
   :: forall a
    . Grain a
@@ -56,7 +56,7 @@ useGlobalValue proxy = Render do
   withReaderT (const query)
     $ liftEffect $ query.selectGlobalValue proxy
 
--- | Get an updater of received key.
+-- | Get an updater of a partial global state.
 useGlobalUpdater
   :: forall a
    . Grain a
