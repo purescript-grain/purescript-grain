@@ -5,7 +5,7 @@ module Grain
   , module Grain.UI
   ) where
 
-import Grain.Class (class Grain, GProxy(..), grain, grainWithKey)
+import Grain.Class (class Grain, GProxy, grain, grainKey, grainWithKey)
 import Grain.Render (Render, useGlobalUpdater, useGlobalValue, useLocalState)
 import Grain.TypeRef (fromConstructor)
 import Grain.UI (UI, VNode, mountUI, patchUI)

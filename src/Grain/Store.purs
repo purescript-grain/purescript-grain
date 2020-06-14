@@ -15,7 +15,7 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert, lookup)
-import Grain.Class (class Grain, GProxy(..), initialState, typeRefOf)
+import Grain.Class (class Grain, GProxy, grainKey, initialState, typeRefOf)
 import Grain.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
 import Grain.TypeKeyRef (TypeKeyRef)
 import Grain.TypeKeyRef as TKRef
@@ -90,9 +90,9 @@ readPartKey
   -> Effect String
 readPartKey proxy (Store { typeKeyRef }) = do
   typeKey <- TKRef.read (typeRefOf proxy) typeKeyRef
-  pure case proxy of
-    GProxy Nothing -> typeKey
-    GProxy (Just key) -> typeKey <> "-" <> key
+  pure case grainKey proxy of
+         "" -> typeKey
+         key -> typeKey <> "-" <> key
 
 lookupPart
   :: forall a

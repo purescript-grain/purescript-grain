@@ -5,9 +5,8 @@ module View.Item
 import Prelude
 
 import Data.Array (delete)
-import Data.Maybe (fromMaybe)
 import Data.Newtype (over)
-import Grain (class Grain, GProxy(..), VNode, fromConstructor, grain, grainWithKey, useGlobalUpdater, useGlobalValue)
+import Grain (class Grain, VNode, fromConstructor, grain, grainKey, grainWithKey, useGlobalUpdater, useGlobalValue)
 import Grain.Markup as H
 import State.ItemIds (ItemIds(..))
 
@@ -17,9 +16,9 @@ newtype Item = Item
   }
 
 instance grainItem :: Grain Item where
-  initialState (GProxy maybeKey) =
+  initialState proxy =
     pure $ Item
-      { name: "Globally stored Item" <> fromMaybe "" maybeKey
+      { name: "Globally stored Item" <> grainKey proxy
       , clicked: false
       }
   typeRefOf _ = fromConstructor Item
