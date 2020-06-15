@@ -2,19 +2,18 @@
   "private": true,
   "name": "purescript-grain",
   "scripts": {
-    "postinstall": "bower i",
-    "bower": "bower",
-    "watch": "pulp --watch build",
+    "spago": "spago",
+    "watch": "spago build -w -u '--strict --stash --censor-lib --is-lib=.spago'",
     "clean": "rm -rf output",
-    "test": "pulp test",
-    "pulp:version": "pulp version",
+    "test": "spago -x test.dhall test -u '--strict --stash --censor-lib --is-lib=.spago'",
+    "bump-version": "spago bump-version --no-dry-run",
     "pulp:publish": "pulp publish",
     "pulp:login": "pulp login"
   },
   "dependencies": {
-    "bower": "^1.8.8",
     "pulp": "^15.0.0",
     "purescript": "^0.13.8",
-    "purescript-psa": "^0.7.3"
+    "purescript-psa": "^0.7.3",
+    "spago": "^0.15.2"
   }
 }
