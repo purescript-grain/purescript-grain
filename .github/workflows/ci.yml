@@ -25,9 +25,9 @@ jobs:
       uses: actions/cache@v1
       with:
         path: .spago
-        key: ${{ runner.os }}-spg-${{ hashFiles('packages.dhall') }}-${{ hashFiles('spago.dhall') }}-${{ hashFiles('test.dhall') }}
+        key: ${{ runner.os }}-deps-${{ hashFiles('packages.dhall') }}-${{ hashFiles('spago.dhall') }}-${{ hashFiles('test.dhall') }}
         restore-keys: |
-          ${{ runner.os }}-spg-
+          ${{ runner.os }}-deps-
 
     - name: Install dependencies
       run: npm ci
