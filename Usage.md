@@ -213,7 +213,132 @@ view =
 
 ### Component
 
-Coming soon.
+You can construct a component with `component` function.
+
+```purescript
+import Prelude
+
+import Grain (VNode)
+import Grain.Markup as H
+
+view :: VNode
+view = H.component do
+  pure $ H.div # H.kids [ H.text "Sample Text" ]
+```
+
+In a component, you can declare that you use state with API like React Hooks.
+
+- `useValue`
+  - Listen a state, then return it.
+  - If the state is changed, the component will be rerendered.
+- `useUpdater`
+  - Get an updater of a state.
+
+#### Local state example
+
+If you want to use local state, you can create a instance of `LocalGrain`.
+It needs `initialState` and `typeRefOf`.
+
+`TypeRef` is used as state key of store.
+You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
+
+Then you can call `useValue` or `useUpdater` with `LProxy` with a your state type.
+
+```purescript
+import Prelude
+
+import Grain (class LocalGrain, LProxy(..), VNode, fromConstructor, useUpdater, useValue)
+import Grain.Markup as H
+
+newtype Count = Count Int
+
+instance localGrainCount :: LocalGrain Count where
+  initialState _ = pure $ Count 0
+  typeRefOf _ = fromConstructor Count
+
+view :: VNode
+view = H.component do
+  Count count <- useValue (LProxy :: _ Count)
+  updateCount <- useUpdater (LProxy :: _ Count)
+  let increment = updateCount (\(Count c) -> Count $ c + 1)
+  pure $ H.div
+    # H.onClick (const increment)
+    # H.kids [ H.text $ show count ]
+```
+
+#### Global state example
+
+If you want to use global state, you can create a instance of `GlobalGrain`.
+It needs `initialState` and `typeRefOf`.
+
+`TypeRef` is used as state key of store.
+You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
+
+Then you can call `useValue` or `useUpdater` with `GProxy` with a your state type.
+
+State of `GlobalGrain` is registered in global store, therefore, the state isn't deleted when component is deleted, and you can get/update state regardless of component layers.
+
+```purescript
+import Prelude
+
+import Grain (class GlobalGrain, GProxy(..), VNode, fromConstructor, useUpdater, useValue)
+import Grain.Markup as H
+
+newtype Count = Count Int
+
+instance globalGrainCount :: GlobalGrain Count where
+  initialState _ = pure $ Count 0
+  typeRefOf _ = fromConstructor Count
+
+view :: VNode
+view = H.component do
+  Count count <- useValue (GProxy :: _ Count)
+  updateCount <- useUpdater (GProxy :: _ Count)
+  let increment = updateCount (\(Count c) -> Count $ c + 1)
+  pure $ H.div
+    # H.onClick (const increment)
+    # H.kids [ H.text $ show count ]
+```
+
+#### Keyed global state example
+
+If you want to manage global state for each dynamic items, you can create a instance of `KeyedGlobalGrain`.
+It needs `initialState` and `typeRefOf`.
+
+`TypeRef` is used as state key of store.
+You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
+
+Then you can call `useValue` or `useUpdater` with `KGProxy` with a key and a your state type.
+
+State of `KeyedGlobalGrain` is registered in global store, therefore, the state isn't deleted when component is deleted, and you can get/update state regardless of component layers.
+
+```purescript
+import Prelude
+
+import Grain (class KeyedGlobalGrain, KGProxy(..), VNode, fromConstructor, useUpdater, useValue)
+import Grain.Markup as H
+
+newtype Item = Item
+  { name :: String
+  , clicked :: Boolean
+  }
+
+instance keyedGlobalGrainItem :: KeyedGlobalGrain Item where
+  initialState (KGProxy key) = pure $ Item
+    { name: "Item " <> key
+    , clicked: false
+    }
+  typeRefOf _ = fromConstructor Item
+
+view :: String -> VNode
+view key = H.component do
+  Item item <- useValue (KGProxy key :: _ Item)
+  updateItem <- useUpdater (KGProxy key :: _ Item)
+  let onClick = updateItem (\(Item i) -> Item $ i { clicked = true })
+  pure $ H.div
+    # H.onClick (const onClick)
+    # H.kids [ H.text $ item.name <> if item.clicked then " clicked" else "" ]
+```
 
 ## Key
 
