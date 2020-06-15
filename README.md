@@ -4,10 +4,6 @@
 
 A UI library with easy and flexible state management inspired by [Recoil.js](https://recoiljs.org/) and [React Hooks](https://reactjs.org/docs/hooks-intro.html).
 
-[Usage](https://github.com/purescript-grain/purescript-grain/tree/master/Usage.md)
-
-Go to [examples](https://github.com/purescript-grain/purescript-grain/tree/master/examples) or [some packages](https://github.com/purescript-grain) ;)
-
 ## Installation
 
 ### Spago
@@ -15,6 +11,12 @@ Go to [examples](https://github.com/purescript-grain/purescript-grain/tree/maste
 ```
 $ spago install grain
 ```
+
+## Usage
+
+[Usage](https://github.com/purescript-grain/purescript-grain/tree/master/Usage.md)
+
+Go to [examples](https://github.com/purescript-grain/purescript-grain/tree/master/examples) or [some packages](https://github.com/purescript-grain) ;)
 
 ## LICENSE
 
