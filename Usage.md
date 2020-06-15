@@ -234,6 +234,8 @@ In a component, you can declare that you use state with API like React Hooks.
 - `useUpdater`
   - Get an updater of a partial state.
 
+And **you can use some typeclasses to declare state, where you want, and at any level of granularity**.
+
 #### Local state example
 
 If you want to use local state, you can create a instance of `LocalGrain`.
@@ -305,7 +307,7 @@ view = H.component do
 If you want to manage global state for each dynamic items, you can create a instance of `KeyedGlobalGrain`.
 It needs `initialState` and `typeRefOf`.
 
-`TypeRef` is used as state key of store.
+`TypeRef` and a key of `KGProxy` are used as state key of store.
 You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
 
 Then you can call `useValue` or `useUpdater` with `KGProxy` with a key and a your state type.
