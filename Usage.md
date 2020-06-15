@@ -229,10 +229,10 @@ view = H.component do
 In a component, you can declare that you use state with API like React Hooks.
 
 - `useValue`
-  - Listen a state, then return it.
-  - If the state is changed, the component will be rerendered.
+  - Listen a partial state, then return it.
+  - If the partial state is changed, the component will be rerendered.
 - `useUpdater`
-  - Get an updater of a state.
+  - Get an updater of a partial state.
 
 #### Local state example
 
