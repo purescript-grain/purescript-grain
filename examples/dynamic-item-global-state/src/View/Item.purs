@@ -6,7 +6,7 @@ import Prelude
 
 import Data.Array (delete)
 import Data.Newtype (over)
-import Grain (class Grain, VNode, fromConstructor, grain, grainKey, grainWithKey, useGlobalUpdater, useGlobalValue)
+import Grain (class KeyedGlobalGrain, GProxy(..), KGProxy(..), VNode, fromConstructor, useUpdater, useValue)
 import Grain.Markup as H
 import State.ItemIds (ItemIds(..))
 
@@ -15,10 +15,10 @@ newtype Item = Item
   , clicked :: Boolean
   }
 
-instance grainItem :: Grain Item where
-  initialState proxy =
+instance keyGlobalGrainItem :: KeyedGlobalGrain Item where
+  initialState (KGProxy key) =
     pure $ Item
-      { name: "Globally stored Item" <> grainKey proxy
+      { name: "Globally stored Item" <> key
       , clicked: false
       }
   typeRefOf _ = fromConstructor Item
@@ -27,9 +27,9 @@ view :: Int -> VNode
 view id =
   H.key (show id) $ H.fingerprint (show id) $ H.component do
     -- Store each item states globally.
-    Item item <- useGlobalValue (grainWithKey $ show id :: _ Item)
-    updateItem <- useGlobalUpdater (grainWithKey $ show id :: _ Item)
-    updateItemIds <- useGlobalUpdater (grain :: _ ItemIds)
+    Item item <- useValue (KGProxy $ show id :: _ Item)
+    updateItem <- useUpdater (KGProxy $ show id :: _ Item)
+    updateItemIds <- useUpdater (GProxy :: _ ItemIds)
 
     let toggleClicked =
           updateItem \(Item i) ->

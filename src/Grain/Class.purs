@@ -1,41 +1,36 @@
-module Grain.Class
-  ( GProxy
-  , grain
-  , grainWithKey
-  , grainKey
-  , class Grain
-  , initialState
-  , typeRefOf
-  ) where
+module Grain.Class where
+
+import Prelude
 
 import Effect (Effect)
+import Grain.Class.GProxy (class GlobalGrain, GProxy)
+import Grain.Class.GProxy as G
+import Grain.Class.KGProxy (class KeyedGlobalGrain, KGProxy(..))
+import Grain.Class.KGProxy as KG
+import Grain.Class.LProxy (class LocalGrain, LProxy)
+import Grain.Class.LProxy as L
 import Grain.TypeRef (TypeRef)
 
--- | A type of state proxy.
-data GProxy a = GProxy String
+class Grain p a where
+  initialState :: p a -> Effect a
+  typeRefOf :: p a -> TypeRef
+  keySuffix :: p a -> String
+  which :: forall b. p a -> { global :: b, local :: b } -> b
 
--- | A proxy to get a state, updater.
-grain :: forall a. GProxy a
-grain = GProxy ""
+instance grainGProxy :: GlobalGrain a => Grain GProxy a where
+  initialState = G.initialState
+  typeRefOf = G.typeRefOf
+  keySuffix _ = ""
+  which _ { global } = global
 
--- | A proxy to get a state, updater.
--- |
--- | The difference with `grain` is that you can manage a state per any item.
--- | The state is managed per passed key.
-grainWithKey :: forall a. String -> GProxy a
-grainWithKey = GProxy
+instance grainKGProxy :: KeyedGlobalGrain a => Grain KGProxy a where
+  initialState = KG.initialState
+  typeRefOf = KG.typeRefOf
+  keySuffix (KGProxy key) = "-" <> key
+  which _ { global } = global
 
--- | Get a key of `GProxy`.
--- |
--- | if it has no key, this returns empty string.
-grainKey :: forall a. GProxy a -> String
-grainKey (GProxy key) = key
-
--- | Representation of a partial state of application state.
--- |
--- | Application state is composed of this type class's instances.
--- |
--- | `TypeRef` is used as state key internally for uniqueness.
-class Grain a where
-  initialState :: GProxy a -> Effect a
-  typeRefOf :: GProxy a -> TypeRef
+instance grainLProxy :: LocalGrain a => Grain LProxy a where
+  initialState = L.initialState
+  typeRefOf = L.typeRefOf
+  keySuffix _ = ""
+  which _ { local } = local

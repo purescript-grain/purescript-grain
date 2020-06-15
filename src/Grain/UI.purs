@@ -28,7 +28,7 @@ import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Foreign.Object (Object, empty, insert)
-import Grain.Class (class Grain, GProxy)
+import Grain.Class (class Grain, which)
 import Grain.Render (Render, runRender)
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler, unmountStyler)
@@ -480,35 +480,27 @@ evalComponent componentRef = do
   alloc
   componentNode componentRef
   where
-    selectValue :: forall a. Grain a => GProxy a -> Store -> Effect a
-    selectValue proxy store = do
+    storeSelection =
+      { global: _, local: _ }
+        <$> globalStoreFromComponent componentRef
+        <*> localStoreFromComponent componentRef
+
+    selectValue :: forall p a. Grain p a => p a -> Effect a
+    selectValue proxy = do
+      store <- which proxy <$> storeSelection
       subscribeGrain proxy allocRaf store
       flip addComponentUnsubscriber componentRef
         $ unsubscribeGrain proxy allocRaf store
       readGrain proxy store
 
-    selectGlobalValue :: forall a. Grain a => GProxy a -> Effect a
-    selectGlobalValue proxy =
-      globalStoreFromComponent componentRef >>= selectValue proxy
-
-    updateGlobalValue :: forall a. Grain a => GProxy a -> (a -> a) -> Effect Unit
-    updateGlobalValue proxy f =
-      globalStoreFromComponent componentRef >>= updateGrain proxy f
-
-    selectLocalValue :: forall a. Grain a => GProxy a -> Effect a
-    selectLocalValue proxy =
-      localStoreFromComponent componentRef >>= selectValue proxy
-
-    updateLocalValue :: forall a. Grain a => GProxy a -> (a -> a) -> Effect Unit
-    updateLocalValue proxy f =
-      localStoreFromComponent componentRef >>= updateGrain proxy f
+    updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
+    updateValue proxy f = do
+      which proxy <$> storeSelection >>= updateGrain proxy f
 
     eval =
       componentRender componentRef >>= flip runRender
-        { selectGlobalValue
-        , updateGlobalValue
-        , selectLocalValue
-        , updateLocalValue
+        { selectValue
+        , updateValue
         }
 
     alloc = do

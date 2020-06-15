@@ -4,9 +4,8 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, over)
-import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Grain (class Grain, VNode, fromConstructor, grain, mountUI, useLocalState)
+import Grain (class LocalGrain, LProxy(..), VNode, fromConstructor, mountUI, useUpdater, useValue)
 import Grain.Markup as H
 import Web.DOM.Element (toNode)
 import Web.DOM.ParentNode (QuerySelector(..), querySelector)
@@ -28,13 +27,14 @@ derive newtype instance showCount :: Show Count
 
 derive instance newtypeCount :: Newtype Count _
 
-instance grainCount :: Grain Count where
+instance localGrainCount :: LocalGrain Count where
   initialState _ = pure $ Count 0
   typeRefOf _ = fromConstructor Count
 
 view :: VNode
 view = H.component do
-  Tuple count updateCount <- useLocalState (grain :: _ Count)
+  count <- useValue (LProxy :: _ Count)
+  updateCount <- useUpdater (LProxy :: _ Count)
   let increment = updateCount $ over Count (_ + 1)
       decrement = updateCount $ over Count (_ - 1)
   pure $ H.div # H.css containerStyles # H.kids

@@ -15,7 +15,7 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert, lookup)
-import Grain.Class (class Grain, GProxy, grainKey, initialState, typeRefOf)
+import Grain.Class (class Grain, initialState, keySuffix, typeRefOf)
 import Grain.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
 import Grain.TypeKeyRef (TypeKeyRef)
 import Grain.TypeKeyRef as TKRef
@@ -38,9 +38,9 @@ createStore = do
   pure $ Store { typeKeyRef, partsRef }
 
 readGrain
-  :: forall a
-   . Grain a
-  => GProxy a
+  :: forall p a
+   . Grain p a
+  => p a
   -> Store
   -> Effect a
 readGrain proxy store = do
@@ -49,9 +49,9 @@ readGrain proxy store = do
   pure $ unsafeFromForeign value
 
 subscribeGrain
-  :: forall a
-   . Grain a
-  => GProxy a
+  :: forall p a
+   . Grain p a
+  => p a
   -> Effect Unit
   -> Store
   -> Effect Unit
@@ -60,9 +60,9 @@ subscribeGrain proxy listener store = do
   subscribe listener emitter
 
 unsubscribeGrain
-  :: forall a
-   . Grain a
-  => GProxy a
+  :: forall p a
+   . Grain p a
+  => p a
   -> Effect Unit
   -> Store
   -> Effect Unit
@@ -71,9 +71,9 @@ unsubscribeGrain proxy listener store = do
   unsubscribe listener emitter
 
 updateGrain
-  :: forall a
-   . Grain a
-  => GProxy a
+  :: forall p a
+   . Grain p a
+  => p a
   -> (a -> a)
   -> Store
   -> Effect Unit
@@ -83,21 +83,19 @@ updateGrain proxy f store = do
   emit emitter
 
 readPartKey
-  :: forall a
-   . Grain a
-  => GProxy a
+  :: forall p a
+   . Grain p a
+  => p a
   -> Store
   -> Effect String
 readPartKey proxy (Store { typeKeyRef }) = do
   typeKey <- TKRef.read (typeRefOf proxy) typeKeyRef
-  pure case grainKey proxy of
-         "" -> typeKey
-         key -> typeKey <> "-" <> key
+  pure $ typeKey <> keySuffix proxy
 
 lookupPart
-  :: forall a
-   . Grain a
-  => GProxy a
+  :: forall p a
+   . Grain p a
+  => p a
   -> Store
   -> Effect Part
 lookupPart proxy store@(Store { partsRef }) = do

@@ -8,7 +8,7 @@ import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Now (nowDateTime)
 import Effect.Timer (setInterval)
-import Grain (class Grain, VNode, fromConstructor, grain, mountUI, useGlobalUpdater, useGlobalValue)
+import Grain (class GlobalGrain, GProxy(..), VNode, fromConstructor, mountUI, useUpdater, useValue)
 import Grain.Markup as H
 import Web.DOM.Element (toNode)
 import Web.DOM.ParentNode (QuerySelector(..), querySelector)
@@ -26,13 +26,13 @@ main = do
 
 newtype Now = Now DateTime
 
-instance grainNow :: Grain Now where
+instance globalGrainNow :: GlobalGrain Now where
   initialState _ = Now <$> nowDateTime
   typeRefOf _ = fromConstructor Now
 
 view :: VNode
 view = H.component do
-  updateNow <- useGlobalUpdater (grain :: _ Now)
+  updateNow <- useUpdater (GProxy :: _ Now)
 
   let listenNow = void $ setInterval 5000 do
         now <- nowDateTime
@@ -44,7 +44,7 @@ view = H.component do
 
 nowView :: VNode
 nowView = H.component do
-  Now now <- useGlobalValue (grain :: _ Now)
+  Now now <- useValue (GProxy :: _ Now)
 
   pure $ H.span # H.kids
     [ H.text $ toString $ fromDateTime now
