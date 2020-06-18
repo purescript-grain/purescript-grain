@@ -4,6 +4,8 @@
 
 A UI library with easy and flexible state management inspired by [Recoil.js](https://recoiljs.org/) and [React Hooks](https://reactjs.org/docs/hooks-intro.html).
 
+## Concepts
+
 - **Easy and flexible state management**
   - API like [React Hooks](https://reactjs.org/docs/hooks-intro.html)
   - Flexible and efficient state subscribing like [Recoil.js](https://recoiljs.org/)
