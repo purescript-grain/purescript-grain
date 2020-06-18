@@ -6,22 +6,10 @@ import Prelude
 
 import Data.Array (delete)
 import Data.Newtype (over)
-import Grain (class KeyedGlobalGrain, GProxy(..), KGProxy(..), VNode, fromConstructor, useUpdater, useValue)
+import Grain (GProxy(..), KGProxy(..), VNode, useUpdater, useValue)
 import Grain.Markup as H
+import State.Item (Item(..))
 import State.ItemIds (ItemIds(..))
-
-newtype Item = Item
-  { name :: String
-  , clicked :: Boolean
-  }
-
-instance keyGlobalGrainItem :: KeyedGlobalGrain Item where
-  initialState (KGProxy key) =
-    pure $ Item
-      { name: "Globally stored Item" <> key
-      , clicked: false
-      }
-  typeRefOf _ = fromConstructor Item
 
 view :: Int -> VNode
 view id =
