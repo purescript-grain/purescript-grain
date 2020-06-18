@@ -2,6 +2,17 @@
 
 This document explains the usage of `purescript-grain`.
 
+## Table of contents
+
+- [How to construct UI](#how-to-construct-ui)
+  - [Text](#text)
+  - [Element](#element)
+  - [Component](#component)
+- [Key](#key)
+- [Fingerprint](#fingerprint)
+- [Examples](#examples)
+- [Module documentation](#module-documentation)
+
 ## How to construct UI
 
 You can implement views with `VNode`.
