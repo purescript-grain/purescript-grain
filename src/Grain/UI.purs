@@ -19,6 +19,7 @@ module Grain.UI
   , runRender
   , useValue
   , useUpdater
+  , usePortal
   ) where
 
 import Prelude
@@ -251,6 +252,7 @@ newtype QueryBox = QueryBox Query
 type Query =
   { selectValue :: forall p a. Grain p a => p a -> Effect a
   , updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
+  , portalVNode :: Effect Node -> VNode -> VNode
   }
 
 runRender :: forall a. Render a -> Query -> Effect a
@@ -278,6 +280,12 @@ useUpdater
 useUpdater proxy = Render do
   QueryBox query <- ask
   pure $ query.updateValue proxy
+
+-- | Get portal function.
+usePortal :: Effect Node -> Render (VNode -> VNode)
+usePortal getPortalRoot = Render do
+  QueryBox query <- ask
+  pure $ query.portalVNode getPortalRoot
 
 
 
@@ -507,6 +515,7 @@ type ComponentRef = Ref
   , history :: Array Archive
   , store :: Store
   , context :: UIContext
+  , portalHistory :: Array Archive
   }
 
 newComponentRef :: UIContext -> Render VNode -> Effect ComponentRef
@@ -520,6 +529,7 @@ newComponentRef context render = do
     , history: []
     , store
     , context
+    , portalHistory: []
     }
 
 unmountComponent :: ComponentRef -> Effect Unit
@@ -552,10 +562,13 @@ evalComponent componentRef = do
     updateValue proxy f = do
       which proxy <$> storeSelection >>= updateGrain proxy f
 
+    portalVNode = getPortal componentRef
+
     eval =
       componentRender componentRef >>= flip runRender
         { selectValue
         , updateValue
+        , portalVNode
         }
 
     alloc = do
@@ -630,6 +643,47 @@ triggerUnsubscriber :: ComponentRef -> Effect Unit
 triggerUnsubscriber componentRef = do
   join $ read componentRef <#> _.unsubscribe
   flip modify_ componentRef _ { unsubscribe = pure unit }
+
+getPortal :: ComponentRef -> Effect Node -> VNode -> VNode
+getPortal componentRef getPortalRoot vnode =
+  element "span"
+    # didCreate (const patchPortal)
+    # didUpdate (const patchPortal)
+    # didDelete (const deletePortal)
+  where
+    patchPortal = do
+      parentNode <- getPortalRoot
+      context <- contextFromComponent componentRef
+      history <- addPortalHistory vnode componentRef
+      flip runReaderT context $ patch
+        { current: history !! 1
+        , next: history !! 0
+        , parentNode
+        , nodeIndex: 0
+        , moveIndex: Nothing
+        }
+
+    deletePortal = do
+      parentNode <- getPortalRoot
+      context <- contextFromComponent componentRef
+      history <- componentPortalHistory componentRef
+      flip runReaderT context $ patch
+        { current: history !! 0
+        , next: Nothing
+        , parentNode
+        , nodeIndex: 0
+        , moveIndex: Nothing
+        }
+
+componentPortalHistory :: ComponentRef -> Effect (Array Archive)
+componentPortalHistory componentRef =
+  read componentRef <#> _.portalHistory
+
+addPortalHistory :: VNode -> ComponentRef -> Effect (Array Archive)
+addPortalHistory vnode componentRef = do
+  archive <- createArchive vnode
+  _.portalHistory <$> flip modify componentRef \r ->
+    r { portalHistory = take 2 $ archive : r.portalHistory }
 
 
 
