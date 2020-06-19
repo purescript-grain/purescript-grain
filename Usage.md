@@ -8,6 +8,8 @@ This document explains the usage of `purescript-grain`.
   - [Text](#text)
   - [Element](#element)
   - [Component](#component)
+    - [State](#state)
+    - [Portal](#portal)
 - [Key](#key)
 - [Fingerprint](#fingerprint)
 - [Examples](#examples)
@@ -237,6 +239,8 @@ view = H.component do
   pure $ H.div # H.kids [ H.text "Sample Text" ]
 ```
 
+#### State
+
 In a component, you can declare that you use state with API like React Hooks.
 
 - `useValue`
@@ -247,7 +251,7 @@ In a component, you can declare that you use state with API like React Hooks.
 
 And **you can use some typeclasses to declare state, where you want, and at any level of granularity**.
 
-#### Local state example
+##### Local state example
 
 If you want to use local state, you can create a instance of `LocalGrain`.
 It needs `initialState` and `typeRefOf`.
@@ -279,7 +283,7 @@ view = H.component do
     # H.kids [ H.text $ show count ]
 ```
 
-#### Global state example
+##### Global state example
 
 If you want to use global state, you can create a instance of `GlobalGrain`.
 It needs `initialState` and `typeRefOf`.
@@ -313,7 +317,7 @@ view = H.component do
     # H.kids [ H.text $ show count ]
 ```
 
-#### Keyed global state example
+##### Keyed global state example
 
 If you want to manage global state for each dynamic items, you can create a instance of `KeyedGlobalGrain`.
 It needs `initialState` and `typeRefOf`.
@@ -351,6 +355,44 @@ view key = H.component do
   pure $ H.div
     # H.onClick (const onClick)
     # H.kids [ H.text $ item.name <> if item.clicked then " clicked" else "" ]
+```
+
+#### Portal
+
+Portal is a way to render children into a node that exists outside the DOM hierarchy of the parent node.
+
+You may want this when you implement dialog, dropdown and so on.
+
+In that case, You can use `usePortal`.
+
+`usePortal` is received parent node getter, then returns `VNode -> VNode`.
+
+The function is received a child, and render it in parent node.
+
+```purescript
+import Prelude
+
+import Data.Maybe (fromJust)
+import Grain (VNode, usePortal)
+import Grain.Markup as H
+import Partial.Unsafe (unsafePartial)
+import Web.DOM.Element (toNode)
+import Web.DOM.NonElementParentNode (getElementById)
+import Web.HTML (window)
+import Web.HTML.HTMLDocument (toNonElementParentNode)
+import Web.HTML.Window (document)
+
+portalSample :: VNode
+portalSample = H.component do
+  portal <- usePortal do
+    maybeEl <- window
+      >>= document
+      <#> toNonElementParentNode
+      >>= getElementById "portal-root"
+    -- NOTE: This element is written already in index.html
+    pure $ toNode $ unsafePartial $ fromJust maybeEl
+
+  pure $ portal $ H.div # H.kids [ H.text "sample" ]
 ```
 
 ## Key
