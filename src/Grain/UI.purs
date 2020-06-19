@@ -1,8 +1,5 @@
 module Grain.UI
-  ( UI
-  , mountUI
-  , patchUI
-  , VNode
+  ( VNode
   , key
   , fingerprint
   , component
@@ -14,11 +11,19 @@ module Grain.UI
   , didCreate
   , didUpdate
   , didDelete
+  , Render
+  , Query
+  , runRender
+  , useValue
+  , useUpdater
+  , usePortal
+  , mount
   ) where
 
 import Prelude
 
-import Control.Monad.Reader (ReaderT, ask, local, runReaderT)
+import Control.Monad.Reader (ReaderT, ask, local, runReaderT, withReaderT)
+import Control.Monad.Rec.Class (class MonadRec)
 import Data.Array (take, (!!), (:))
 import Data.Foldable (sequence_)
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -29,9 +34,8 @@ import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain, which)
-import Grain.Render (Render, runRender)
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
-import Grain.Styler (Styler, mountStyler, unmountStyler)
+import Grain.Styler (Styler, mountStyler)
 import Grain.UI.Diff (class HasKey, diff)
 import Grain.UI.Element (allocElement, updateElement)
 import Grain.UI.Util (childNode, createText_, raf)
@@ -40,67 +44,6 @@ import Web.DOM.Element as E
 import Web.DOM.Node (Node, appendChild, insertBefore, removeChild, setTextContent)
 import Web.DOM.Text as T
 import Web.Event.Event (Event)
-
-
-
--- | The type of UI state.
-newtype UI = UI
-  (Ref { parentNode :: Node, context :: UIContext, history :: Array Archive })
-
--- | Mount a `VNode` to a parent node.
-mountUI :: VNode -> Node -> Effect UI
-mountUI vnode parentNode = do
-  context <- createContext
-  archive <- createArchive vnode
-  void $ flip runReaderT context $ patch
-    { current: Nothing
-    , next: Just archive
-    , parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    }
-  UI <$> new
-    { parentNode
-    , context
-    , history: [ archive ]
-    }
-
--- | Patch a `VNode` of UI.
-patchUI :: Maybe VNode -> UI -> Effect Unit
-patchUI Nothing (UI ref) = do
-  r <- read ref
-  void $ flip runReaderT r.context $ patch
-    { current: r.history !! 0
-    , next: Nothing
-    , parentNode: r.parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    }
-  unmountStyler r.context.styler
-patchUI (Just vnode) (UI ref) = do
-  archive <- createArchive vnode
-  r <- flip modify ref \r -> r { history = archive : r.history }
-  void $ flip runReaderT r.context $ patch
-    { current: r.history !! 1
-    , next: r.history !! 0
-    , parentNode: r.parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    }
-
-
-
-type UIContext =
-  { store :: Store
-  , styler :: Styler
-  , isSvg :: Boolean
-  }
-
-createContext :: Effect UIContext
-createContext =
-  { store: _, styler: _, isSvg: false }
-    <$> createStore
-    <*> mountStyler
 
 
 
@@ -226,12 +169,89 @@ didDelete _ velement = velement
 
 
 
+-- | The type of component renderer.
+-- |
+-- | In this monad, you can declare that you use some states and updaters.
+newtype Render a = Render (ReaderT QueryBox Effect a)
+
+-- Do not derive MonadEffect
+derive newtype instance functorRender :: Functor Render
+derive newtype instance applyRender :: Apply Render
+derive newtype instance applicativeRender :: Applicative Render
+derive newtype instance bindRender :: Bind Render
+derive newtype instance monadRender :: Monad Render
+derive newtype instance semigroupRender :: Semigroup a => Semigroup (Render a)
+derive newtype instance monoidRender :: Monoid a => Monoid (Render a)
+derive newtype instance monadRecRender :: MonadRec Render
+
+newtype QueryBox = QueryBox Query
+
+type Query =
+  { selectValue :: forall p a. Grain p a => p a -> Effect a
+  , updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
+  , portalVNode :: Effect Node -> VNode -> VNode
+  }
+
+runRender :: forall a. Render a -> Query -> Effect a
+runRender (Render reader) = runReaderT reader <<< QueryBox
+
+-- | Listen a state, then return it.
+-- |
+-- | If the state is changed, the component will be rerendered.
+useValue
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render a
+useValue proxy = Render do
+  QueryBox query <- ask
+  withReaderT (const query)
+    $ liftEffect $ query.selectValue proxy
+
+-- | Get an updater of a state.
+useUpdater
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render ((a -> a) -> Effect Unit)
+useUpdater proxy = Render do
+  QueryBox query <- ask
+  pure $ query.updateValue proxy
+
+-- | Get portal function.
+usePortal :: Effect Node -> Render (VNode -> VNode)
+usePortal getPortalRoot = Render do
+  QueryBox query <- ask
+  pure $ query.portalVNode getPortalRoot
+
+
+
+-- | Mount a `VNode` to a parent node.
+mount :: VNode -> Node -> Effect Unit
+mount vnode parentNode = do
+  store <- createStore
+  styler <- mountStyler
+  archive <- createArchive vnode
+  flip runReaderT { store, styler, isSvg: false } $ patch
+    { current: Nothing
+    , next: Just archive
+    , parentNode
+    , nodeIndex: 0
+    , moveIndex: Nothing
+    }
+
 type PatchArgs =
   { current :: Maybe Archive
   , next :: Maybe Archive
   , parentNode :: Node
   , nodeIndex :: Int
   , moveIndex :: Maybe Int
+  }
+
+type UIContext =
+  { store :: Store
+  , styler :: Styler
+  , isSvg :: Boolean
   }
 
 patch :: PatchArgs -> ReaderT UIContext Effect Unit
@@ -452,6 +472,7 @@ type ComponentRef = Ref
   , history :: Array Archive
   , store :: Store
   , context :: UIContext
+  , portalHistory :: Array Archive
   }
 
 newComponentRef :: UIContext -> Render VNode -> Effect ComponentRef
@@ -465,6 +486,7 @@ newComponentRef context render = do
     , history: []
     , store
     , context
+    , portalHistory: []
     }
 
 unmountComponent :: ComponentRef -> Effect Unit
@@ -497,10 +519,13 @@ evalComponent componentRef = do
     updateValue proxy f = do
       which proxy <$> storeSelection >>= updateGrain proxy f
 
+    portalVNode = getPortal componentRef
+
     eval =
       componentRender componentRef >>= flip runRender
         { selectValue
         , updateValue
+        , portalVNode
         }
 
     alloc = do
@@ -575,6 +600,47 @@ triggerUnsubscriber :: ComponentRef -> Effect Unit
 triggerUnsubscriber componentRef = do
   join $ read componentRef <#> _.unsubscribe
   flip modify_ componentRef _ { unsubscribe = pure unit }
+
+getPortal :: ComponentRef -> Effect Node -> VNode -> VNode
+getPortal componentRef getPortalRoot vnode =
+  element "span"
+    # didCreate (const patchPortal)
+    # didUpdate (const patchPortal)
+    # didDelete (const deletePortal)
+  where
+    patchPortal = do
+      parentNode <- getPortalRoot
+      context <- contextFromComponent componentRef
+      history <- addPortalHistory vnode componentRef
+      flip runReaderT context $ patch
+        { current: history !! 1
+        , next: history !! 0
+        , parentNode
+        , nodeIndex: 0
+        , moveIndex: Nothing
+        }
+
+    deletePortal = do
+      parentNode <- getPortalRoot
+      context <- contextFromComponent componentRef
+      history <- componentPortalHistory componentRef
+      flip runReaderT context $ patch
+        { current: history !! 0
+        , next: Nothing
+        , parentNode
+        , nodeIndex: 0
+        , moveIndex: Nothing
+        }
+
+componentPortalHistory :: ComponentRef -> Effect (Array Archive)
+componentPortalHistory componentRef =
+  read componentRef <#> _.portalHistory
+
+addPortalHistory :: VNode -> ComponentRef -> Effect (Array Archive)
+addPortalHistory vnode componentRef = do
+  archive <- createArchive vnode
+  _.portalHistory <$> flip modify componentRef \r ->
+    r { portalHistory = take 2 $ archive : r.portalHistory }
 
 
 

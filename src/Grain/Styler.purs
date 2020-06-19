@@ -1,7 +1,6 @@
 module Grain.Styler
   ( Styler
   , mountStyler
-  , unmountStyler
   , registerStyle
   ) where
 
@@ -23,7 +22,7 @@ import Foreign.Object (Object, empty, insert, member, values)
 import Partial.Unsafe (unsafePartial)
 import Web.DOM.Document (createElement)
 import Web.DOM.Element as E
-import Web.DOM.Node (Node, appendChild, removeChild, setTextContent)
+import Web.DOM.Node (Node, appendChild, setTextContent)
 import Web.HTML (window)
 import Web.HTML.HTMLDocument (head, toDocument)
 import Web.HTML.HTMLElement (toNode)
@@ -39,10 +38,6 @@ mountStyler = do
   node <- createStyleNode
   stylesRef <- new empty
   pure $ Styler { node, stylesRef }
-
-unmountStyler :: Styler -> Effect Unit
-unmountStyler (Styler s) =
-  void $ getHead >>= removeChild s.node
 
 registerStyle :: String -> Styler -> Effect String
 registerStyle style (Styler s) = do
