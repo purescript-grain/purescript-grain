@@ -8,7 +8,7 @@ import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Now (nowDateTime)
 import Effect.Timer (setInterval)
-import Grain (class GlobalGrain, GProxy(..), VNode, fromConstructor, mountUI, useUpdater, useValue)
+import Grain (class GlobalGrain, GProxy(..), VNode, fromConstructor, mount, useUpdater, useValue)
 import Grain.Markup as H
 import Web.DOM.Element (toNode)
 import Web.DOM.ParentNode (QuerySelector(..), querySelector)
@@ -22,7 +22,7 @@ main = do
   case maybeEl of
     Nothing -> pure unit
     Just el ->
-      void $ mountUI view $ toNode el
+      mount view $ toNode el
 
 newtype Now = Now DateTime
 

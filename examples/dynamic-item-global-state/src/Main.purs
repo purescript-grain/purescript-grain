@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Grain (mountUI)
+import Grain (mount)
 import View (view)
 import Web.DOM.Element (toNode)
 import Web.DOM.ParentNode (QuerySelector(..), querySelector)
@@ -18,4 +18,4 @@ main = do
   case maybeEl of
     Nothing -> pure unit
     Just el ->
-      void $ mountUI view $ toNode el
+      mount view $ toNode el
