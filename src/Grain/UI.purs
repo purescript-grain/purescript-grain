@@ -1,8 +1,5 @@
 module Grain.UI
-  ( UI
-  , mountUI
-  , patchUI
-  , VNode
+  ( VNode
   , key
   , fingerprint
   , component
@@ -20,6 +17,7 @@ module Grain.UI
   , useValue
   , useUpdater
   , usePortal
+  , mount
   ) where
 
 import Prelude
@@ -37,7 +35,7 @@ import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain, which)
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
-import Grain.Styler (Styler, mountStyler, unmountStyler)
+import Grain.Styler (Styler, mountStyler)
 import Grain.UI.Diff (class HasKey, diff)
 import Grain.UI.Element (allocElement, updateElement)
 import Grain.UI.Util (childNode, createText_, raf)
@@ -46,67 +44,6 @@ import Web.DOM.Element as E
 import Web.DOM.Node (Node, appendChild, insertBefore, removeChild, setTextContent)
 import Web.DOM.Text as T
 import Web.Event.Event (Event)
-
-
-
--- | The type of UI state.
-newtype UI = UI
-  (Ref { parentNode :: Node, context :: UIContext, history :: Array Archive })
-
--- | Mount a `VNode` to a parent node.
-mountUI :: VNode -> Node -> Effect UI
-mountUI vnode parentNode = do
-  context <- createContext
-  archive <- createArchive vnode
-  void $ flip runReaderT context $ patch
-    { current: Nothing
-    , next: Just archive
-    , parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    }
-  UI <$> new
-    { parentNode
-    , context
-    , history: [ archive ]
-    }
-
--- | Patch a `VNode` of UI.
-patchUI :: Maybe VNode -> UI -> Effect Unit
-patchUI Nothing (UI ref) = do
-  r <- read ref
-  void $ flip runReaderT r.context $ patch
-    { current: r.history !! 0
-    , next: Nothing
-    , parentNode: r.parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    }
-  unmountStyler r.context.styler
-patchUI (Just vnode) (UI ref) = do
-  archive <- createArchive vnode
-  r <- flip modify ref \r -> r { history = archive : r.history }
-  void $ flip runReaderT r.context $ patch
-    { current: r.history !! 1
-    , next: r.history !! 0
-    , parentNode: r.parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    }
-
-
-
-type UIContext =
-  { store :: Store
-  , styler :: Styler
-  , isSvg :: Boolean
-  }
-
-createContext :: Effect UIContext
-createContext =
-  { store: _, styler: _, isSvg: false }
-    <$> createStore
-    <*> mountStyler
 
 
 
@@ -289,12 +226,32 @@ usePortal getPortalRoot = Render do
 
 
 
+-- | Mount a `VNode` to a parent node.
+mount :: VNode -> Node -> Effect Unit
+mount vnode parentNode = do
+  store <- createStore
+  styler <- mountStyler
+  archive <- createArchive vnode
+  flip runReaderT { store, styler, isSvg: false } $ patch
+    { current: Nothing
+    , next: Just archive
+    , parentNode
+    , nodeIndex: 0
+    , moveIndex: Nothing
+    }
+
 type PatchArgs =
   { current :: Maybe Archive
   , next :: Maybe Archive
   , parentNode :: Node
   , nodeIndex :: Int
   , moveIndex :: Maybe Int
+  }
+
+type UIContext =
+  { store :: Store
+  , styler :: Styler
+  , isSvg :: Boolean
   }
 
 patch :: PatchArgs -> ReaderT UIContext Effect Unit
