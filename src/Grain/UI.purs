@@ -15,6 +15,7 @@ module Grain.UI
   , Query
   , runRender
   , useValue
+  , useFinder
   , useUpdater
   , usePortal
   , mount
@@ -188,6 +189,7 @@ newtype QueryBox = QueryBox Query
 
 type Query =
   { selectValue :: forall p a. Grain p a => p a -> Effect a
+  , listenValue :: forall p a. Grain p a => p a -> Effect Unit
   , updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
   , portalVNode :: Effect Node -> VNode -> VNode
   }
@@ -205,8 +207,19 @@ useValue
   -> Render a
 useValue proxy = Render do
   QueryBox query <- ask
-  withReaderT (const query)
-    $ liftEffect $ query.selectValue proxy
+  withReaderT (const query) $ liftEffect do
+    query.listenValue proxy
+    query.selectValue proxy
+
+-- | Get a finder of a state.
+useFinder
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render (Effect a)
+useFinder proxy = Render do
+  QueryBox query <- ask
+  pure $ query.selectValue proxy
 
 -- | Get an updater of a state.
 useUpdater
@@ -508,12 +521,15 @@ evalComponent componentRef = do
         <*> localStoreFromComponent componentRef
 
     selectValue :: forall p a. Grain p a => p a -> Effect a
-    selectValue proxy = do
+    selectValue proxy =
+      which proxy <$> storeSelection >>= readGrain proxy
+
+    listenValue :: forall p a. Grain p a => p a -> Effect Unit
+    listenValue proxy = do
       store <- which proxy <$> storeSelection
       subscribeGrain proxy allocRaf store
       flip addComponentUnsubscriber componentRef
         $ unsubscribeGrain proxy allocRaf store
-      readGrain proxy store
 
     updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
     updateValue proxy f = do
@@ -524,6 +540,7 @@ evalComponent componentRef = do
     eval =
       componentRender componentRef >>= flip runRender
         { selectValue
+        , listenValue
         , updateValue
         , portalVNode
         }

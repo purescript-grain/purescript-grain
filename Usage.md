@@ -248,6 +248,9 @@ In a component, you can declare that you use state with API like React Hooks.
   - If the partial state is changed, the component will be rerendered.
 - `useUpdater`
   - Get an updater of a partial state.
+- `useFinder`
+  - Get a finder of a partial state.
+  - This is useful when you want a state in a event handler only.
 
 And **you can use some typeclasses to declare state, where you want, and at any level of granularity**.
 
