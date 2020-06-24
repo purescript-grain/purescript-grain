@@ -5,13 +5,12 @@ module Grain.UI.Prop
 
 import Prelude
 
-import Control.Safely (for_)
 import Data.Array (filter, notElem, snoc, union)
 import Data.Maybe (Maybe(..))
 import Data.String (joinWith)
-import Data.Tuple (Tuple, uncurry)
-import Effect (Effect)
-import Foreign.Object (Object, keys, lookup, toUnfoldable)
+import Effect (Effect, foreachE)
+import Foreign.Object (Object, keys, lookup)
+import Grain.Effect (forObjectE)
 import Grain.Styler (Styler, registerStyle)
 import Grain.UI.Util (classNames, hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
 import Web.DOM.DOMTokenList as DTL
@@ -24,9 +23,8 @@ allocProps
   -> Element
   -> Effect Unit
 allocProps styler isSvg props el =
-  let props' :: Array (Tuple String String)
-      props' = toUnfoldable props
-   in for_ props' $ uncurry \name val -> setProp styler isSvg name val el
+  forObjectE props \name val ->
+    setProp styler isSvg name val el
 
 updateProps
   :: Styler
@@ -36,7 +34,7 @@ updateProps
   -> Element
   -> Effect Unit
 updateProps styler isSvg currents nexts el =
-  for_ names updateByName
+  foreachE names updateByName
   where
     names = union (keys currents) (keys nexts)
     updateByName name =
@@ -71,7 +69,7 @@ setProp styler isSvg "css" val el = do
 setProp styler isSvg "class" val el =
   setProp styler isSvg "className" val el
 setProp styler isSvg "className" val el =
-  for_ (classNames val) $ flip (addClass isSvg) el
+  foreachE (classNames val) $ flip (addClass isSvg) el
 setProp _ _ "style" val el =
   setAttribute "style" val el
 setProp _ _ "list" val el =
@@ -106,7 +104,7 @@ removeProp isSvg "css" _ el = do
 removeProp isSvg "class" val el =
   removeProp isSvg "className" val el
 removeProp isSvg "className" val el =
-  for_ (classNames val) $ flip (removeClass isSvg) el
+  foreachE (classNames val) $ flip (removeClass isSvg) el
 removeProp _ "style" _ el =
   removeAttribute "style" el
 removeProp _ "list" _ el =

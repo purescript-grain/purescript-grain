@@ -25,16 +25,15 @@ import Prelude
 
 import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
-import Data.Array (take, (!!), (:))
-import Data.Foldable (sequence_)
+import Data.Array (snoc, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain, which)
+import Grain.Effect (sequenceE, traverseE)
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler)
 import Grain.UI.Diff (class HasKey, diff)
@@ -484,7 +483,7 @@ viewChildrenHistory viewRef =
 type ComponentRef = Ref
   { node :: Maybe Node
   , rendering :: Boolean
-  , unsubscribe :: Effect Unit
+  , unsubscribers :: Array (Effect Unit)
   , render :: Render VNode
   , history :: Array Archive
   , store :: Store
@@ -498,7 +497,7 @@ newComponentRef context render = do
   new
     { node: Nothing
     , rendering: true
-    , unsubscribe: pure unit
+    , unsubscribers: []
     , render
     , history: []
     , store
@@ -580,7 +579,7 @@ unlockRendering componentRef =
 addComponentUnsubscriber :: Effect Unit -> ComponentRef -> Effect Unit
 addComponentUnsubscriber unsubscribe componentRef =
   flip modify_ componentRef \r ->
-    r { unsubscribe = sequence_ [ r.unsubscribe , unsubscribe ] }
+    r { unsubscribers = snoc r.unsubscribers unsubscribe }
 
 addComponentHistory :: VNode -> ComponentRef -> Effect (Array Archive)
 addComponentHistory vnode componentRef = do
@@ -618,8 +617,9 @@ localStoreFromComponent componentRef =
 
 triggerUnsubscriber :: ComponentRef -> Effect Unit
 triggerUnsubscriber componentRef = do
-  join $ read componentRef <#> _.unsubscribe
-  flip modify_ componentRef _ { unsubscribe = pure unit }
+  { unsubscribers } <- read componentRef
+  sequenceE unsubscribers
+  flip modify_ componentRef _ { unsubscribers = [] }
 
 getPortal :: ComponentRef -> Effect Node -> VNode -> VNode
 getPortal componentRef getPortalRoot vnode =
@@ -676,4 +676,4 @@ createArchive :: VNode -> Effect Archive
 createArchive vnode = Tuple vnode <$> new Nothing
 
 createArchives :: Array VNode -> Effect (Array Archive)
-createArchives vnodes = for vnodes createArchive
+createArchives vnodes = traverseE createArchive vnodes

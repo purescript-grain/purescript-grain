@@ -9,9 +9,9 @@ module Grain.Emitter
 import Prelude
 
 import Data.Array (filter, snoc)
-import Data.Foldable (sequence_)
 import Effect (Effect)
 import Effect.Ref (Ref, modify_, new, read)
+import Grain.Effect (sequenceE)
 import Unsafe.Reference (unsafeRefEq)
 
 newtype Emitter = Emitter (Ref (Array (Effect Unit)))
@@ -30,4 +30,4 @@ unsubscribe listener (Emitter listenersRef) =
 emit :: Emitter -> Effect Unit
 emit (Emitter listenersRef) = do
   listeners <- read listenersRef
-  sequence_ listeners
+  sequenceE listeners

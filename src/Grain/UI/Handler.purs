@@ -5,13 +5,12 @@ module Grain.UI.Handler
 
 import Prelude
 
-import Control.Safely (for_)
 import Data.Array (union)
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
-import Data.Tuple (Tuple, uncurry)
-import Effect (Effect)
-import Foreign.Object (Object, keys, lookup, toUnfoldable)
+import Effect (Effect, foreachE)
+import Foreign.Object (Object, keys, lookup)
+import Grain.Effect (forObjectE)
 import Grain.UI.Util (setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
@@ -22,9 +21,8 @@ allocHandlers
   -> Element
   -> Effect Unit
 allocHandlers handlers el =
-  let handlers' :: Array (Tuple String (Event -> Effect Unit))
-      handlers' = toUnfoldable handlers
-   in for_ handlers' $ uncurry \name handler -> setHandler name handler el
+  forObjectE handlers \name handler ->
+    setHandler name handler el
 
 updateHandlers
   :: Object (Event -> Effect Unit)
@@ -38,7 +36,7 @@ updateHandlers currents nexts el =
           Nothing, Nothing -> pure unit
           Just _, Nothing -> removeHandler name el
           _, Just handler -> setHandler name handler el
-   in for_ names updateByName
+   in foreachE names updateByName
 
 setHandler
   :: String
