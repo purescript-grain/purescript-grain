@@ -24,12 +24,22 @@ testDiff = suite "Diff" do
     Safe.for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
-        liftEffect $ diff patch ref startingList targetList
+        liftEffect $ diff patch
+          { context: unit
+          , parent: ref
+          , currentChildren: startingList
+          , nextChildren: targetList
+          }
         sourceList <- liftEffect $ read ref
         Assert.equal targetList sourceList
     test ("[] -> " <> show startingList) do
       ref <- liftEffect $ new []
-      liftEffect $ diff patch ref [] startingList
+      liftEffect $ diff patch
+        { context: unit
+        , parent: ref
+        , currentChildren: []
+        , nextChildren: startingList
+        }
       sourceList <- liftEffect $ read ref
       Assert.equal startingList sourceList
 
@@ -122,7 +132,8 @@ targetLists =
   ]
 
 type PatchArgs =
-  { current :: Maybe Int
+  { context :: Unit
+  , current :: Maybe Int
   , next :: Maybe Int
   , parentNode :: Ref (Array Int)
   , nodeIndex :: Int
