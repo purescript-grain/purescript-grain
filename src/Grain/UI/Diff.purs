@@ -6,11 +6,12 @@ module Grain.UI.Diff
 
 import Prelude
 
-import Control.Monad.Rec.Class (class MonadRec, Step(..), tailRecM)
+import Control.Monad.Rec.Class (Step(..), tailRecM)
 import Data.Array (length, snoc, unsafeIndex, (!!), (..))
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
 import Foreign.Object as O
 import Partial.Unsafe (unsafePartial)
 
@@ -23,16 +24,17 @@ instance hasKeyInt :: HasKey Int where
 instance hasKeyTuple :: (HasKey a) => HasKey (Tuple a b) where
   getKey idx (Tuple x _) = getKey idx x
 
-type PatchArgs parent child =
-  { current :: Maybe child
+type PatchArgs ctx parent child =
+  { context :: ctx
+  , current :: Maybe child
   , next :: Maybe child
   , parentNode :: parent
   , nodeIndex :: Int
   , moveIndex :: Maybe Int
   }
 
-type Patcher parent child m =
-  PatchArgs parent child -> m Unit
+type Patcher ctx parent child =
+  PatchArgs ctx parent child -> Effect Unit
 
 data RealOperation = Add | Delete
 
@@ -116,16 +118,20 @@ storeKeyToIdx x = x { keyToIndex = _ }
 markProcessKey :: forall a. String -> DiffState a -> DiffState a
 markProcessKey k x = x { keyToIndex = _ } $ O.delete k x.keyToIndex
 
+type DiffArgs ctx parent child =
+  { context :: ctx
+  , parent :: parent
+  , currentChildren :: Array child
+  , nextChildren :: Array child
+  }
+
 diff
-  :: forall parent child m
+  :: forall ctx parent child
    . HasKey child
-  => MonadRec m
-  => Patcher parent child m
-  -> parent
-  -> Array child
-  -> Array child
-  -> m Unit
-diff patch parent currentChildren nextChildren = do
+  => Patcher ctx parent child
+  -> DiffArgs ctx parent child
+  -> Effect Unit
+diff patch { context, parent, currentChildren, nextChildren } = do
   state <- storeKeyToIdx <$> tailRecM takeDiffPerformant initialState
   tailRecM takeDiff state
   where
@@ -138,7 +144,8 @@ diff patch parent currentChildren nextChildren = do
       | s.currentStart > s.currentEnd || s.nextStart > s.nextEnd = pure $ Done s
       | equalKey (getKey s.currentStart <$> cursorCurrentStart s) (getKey s.nextStart <$> cursorNextStart s) = do
           patch
-            { current: cursorCurrentStart s
+            { context
+            , current: cursorCurrentStart s
             , next: cursorNextStart s
             , parentNode: parent
             , nodeIndex: s.currentStart
@@ -147,7 +154,8 @@ diff patch parent currentChildren nextChildren = do
           pure $ Loop $ forwardCurrentCursor >>> forwardNextCursor $ s
       | equalKey (getKey s.currentEnd <$> cursorCurrentEnd s) (getKey s.nextEnd <$> cursorNextEnd s) = do
           patch
-            { current: cursorCurrentEnd s
+            { context
+            , current: cursorCurrentEnd s
             , next: cursorNextEnd s
             , parentNode: parent
             , nodeIndex: s.currentEnd
@@ -163,7 +171,8 @@ diff patch parent currentChildren nextChildren = do
            in case O.lookup nextKey s.keyToIndex of
                 Nothing -> do
                   patch
-                    { current: Nothing
+                    { context
+                    , current: Nothing
                     , next: Just cursorNext
                     , parentNode: parent
                     , nodeIndex: s.nextStart
@@ -175,7 +184,8 @@ diff patch parent currentChildren nextChildren = do
                   let sourceIdx = realSourceIdx currentIdx s
                       targetIdx = s.nextStart
                   patch
-                    { current: s.currents !! currentIdx
+                    { context
+                    , current: s.currents !! currentIdx
                     , next: Just cursorNext
                     , parentNode: parent
                     , nodeIndex: sourceIdx
@@ -189,7 +199,8 @@ diff patch parent currentChildren nextChildren = do
               currentIdx = unsafePartial $ fromJust $ O.lookup currentKey s.keyToIndex
               sourceIdx = realSourceIdx currentIdx s
           patch
-            { current: s.currents !! currentIdx
+            { context
+            , current: s.currents !! currentIdx
             , next: Nothing
             , parentNode: parent
             , nodeIndex: sourceIdx
