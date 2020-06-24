@@ -516,7 +516,7 @@ unmountComponent componentRef = do
 
 evalComponent :: ComponentRef -> Effect (Maybe Node)
 evalComponent componentRef = do
-  alloc
+  eval
   componentNode componentRef
   where
     storeSelection =
@@ -531,9 +531,9 @@ evalComponent componentRef = do
     listenValue :: forall p a. Grain p a => p a -> Effect Unit
     listenValue proxy = do
       store <- which proxy <$> storeSelection
-      subscribeGrain proxy allocRaf store
+      subscribeGrain proxy evalRaf store
       flip addComponentUnsubscriber componentRef
-        $ unsubscribeGrain proxy allocRaf store
+        $ unsubscribeGrain proxy evalRaf store
 
     updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
     updateValue proxy f = do
@@ -541,27 +541,26 @@ evalComponent componentRef = do
 
     portalVNode = getPortal componentRef
 
-    eval =
-      componentRender componentRef >>= flip runRender
+    eval = do
+      unlockRendering componentRef
+      triggerUnsubscriber componentRef
+      render <- componentRender componentRef
+      vnode <- runRender render
         { selectValue
         , listenValue
         , updateValue
         , portalVNode
         }
-
-    alloc = do
-      unlockRendering componentRef
-      triggerUnsubscriber componentRef
-      history <- eval >>= flip addComponentHistory componentRef
+      history <- addComponentHistory vnode componentRef
       context <- contextFromComponent componentRef
       node <- patchElement (history !! 1) (history !! 0) context
       setComponentNode node componentRef
 
-    allocRaf = do
+    evalRaf = do
       locked <- componentRenderingLock componentRef
       when (not locked) do
         lockRendering componentRef
-        raf alloc
+        raf eval
 
 updateComponentRender :: Render VNode -> ComponentRef -> Effect Unit
 updateComponentRender render = modify_ _ { render = render }
