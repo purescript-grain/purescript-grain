@@ -8,7 +8,7 @@ module Grain.UI.Util
   , removeAttributeNS_
   , classNames
   , hasXlinkPrefix
-  , setForeign
+  , setAny
   , isProperty
   , isBoolean
   ) where
@@ -24,7 +24,6 @@ import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn3, EffectFn4, runEffectFn3, runEffectFn4)
-import Foreign (Foreign)
 import Web.DOM.Document (Document, createElement, createElementNS, createTextNode)
 import Web.DOM.Element (Element)
 import Web.DOM.Node (Node, childNodes)
@@ -77,9 +76,9 @@ svgNameSpace = Just "http://www.w3.org/2000/svg"
 xlinkNameSpace :: String
 xlinkNameSpace = "http://www.w3.org/1999/xlink"
 
-setForeign :: String -> Foreign -> Element -> Effect Unit
-setForeign name x element =
-  runEffectFn3 setForeignImpl name x element
+setAny :: forall a. String -> a -> Element -> Effect Unit
+setAny name x element =
+  runEffectFn3 setAnyImpl name x element
 
 setAttributeNS :: String -> String -> String -> Element -> Effect Unit
 setAttributeNS ns name val element =
@@ -97,7 +96,7 @@ isBoolean :: String -> Element -> Boolean
 isBoolean name element =
   runFn2 isBooleanImpl name element
 
-foreign import setForeignImpl :: EffectFn3 String Foreign Element Unit
+foreign import setAnyImpl :: forall a. EffectFn3 String a Element Unit
 foreign import setAttributeNSImpl :: EffectFn4 String String String Element Unit
 foreign import removeAttributeNSImpl :: EffectFn3 String String Element Unit
 foreign import isPropertyImpl :: Fn2 String Element Boolean

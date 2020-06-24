@@ -11,9 +11,8 @@ import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
 import Data.Tuple (Tuple, uncurry)
 import Effect (Effect)
-import Foreign (unsafeToForeign)
 import Foreign.Object (Object, keys, lookup, toUnfoldable)
-import Grain.UI.Util (setForeign)
+import Grain.UI.Util (setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 import Web.Event.EventTarget (eventListener)
@@ -48,7 +47,7 @@ setHandler
   -> Effect Unit
 setHandler name handler el = do
   listener <- eventListener handler
-  setForeign name (unsafeToForeign listener) el
+  setAny name listener el
 
 removeHandler :: String -> Element -> Effect Unit
-removeHandler name = setForeign name (unsafeToForeign null)
+removeHandler name = setAny name null

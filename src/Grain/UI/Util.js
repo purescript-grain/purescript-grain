@@ -1,7 +1,7 @@
 'use strict';
 
-exports.setForeignImpl = function(name, foreign, element) {
-  element[name] = foreign;
+exports.setAnyImpl = function(name, any, element) {
+  element[name] = any;
   return {};
 }
 

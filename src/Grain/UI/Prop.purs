@@ -11,10 +11,9 @@ import Data.Maybe (Maybe(..))
 import Data.String (joinWith)
 import Data.Tuple (Tuple, uncurry)
 import Effect (Effect)
-import Foreign (unsafeToForeign)
 import Foreign.Object (Object, keys, lookup, toUnfoldable)
-import Grain.UI.Util (classNames, hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAttributeNS_, setForeign)
 import Grain.Styler (Styler, registerStyle)
+import Grain.UI.Util (classNames, hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
 import Web.DOM.DOMTokenList as DTL
 import Web.DOM.Element (Element, classList, getAttribute, removeAttribute, setAttribute)
 
@@ -85,8 +84,8 @@ setProp _ isSvg name val el =
   if isProperty name el && not isSvg
     then
       if isBoolean name el
-        then setForeign name (unsafeToForeign $ not $ val == "false") el
-        else setForeign name (unsafeToForeign val) el
+        then setAny name (val /= "false") el
+        else setAny name val el
     else
       if isSvg && hasXlinkPrefix name
         then setAttributeNS_ name val el
@@ -121,7 +120,7 @@ removeProp isSvg name _ el = do
     then removeAttributeNS_ name el
     else do
       when (isProperty name el && not isSvg)
-        $ setForeign name (unsafeToForeign "") el
+        $ setAny name "" el
       removeAttribute name el
 
 addClass :: Boolean -> String -> Element -> Effect Unit
