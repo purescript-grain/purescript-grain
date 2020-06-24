@@ -25,10 +25,10 @@ import Prelude
 
 import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
-import Data.Array (snoc, take, (!!), (:))
+import Data.Array (length, snoc, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
+import Effect (Effect, forE)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Foreign.Object (Object, empty, insert)
@@ -358,12 +358,15 @@ operateCreating (Tuple (VElement r) resultRef) context = do
   el <- allocElement context.styler context.isSvg r
   nextChildren <- createArchives r.children
   let node = E.toNode el
-  diff patch
-    { context
-    , parent: node
-    , currentChildren: []
-    , nextChildren
-    }
+  forE 0 (length nextChildren) \i ->
+    patch
+      { context
+      , current: Nothing
+      , next: nextChildren !! i
+      , parentNode: node
+      , nodeIndex: i
+      , moveIndex: Nothing
+      }
   viewRef <- newViewRef node nextChildren
   write (Just $ View viewRef) resultRef
   raf $ r.didCreate el
@@ -390,12 +393,16 @@ operateDeleting (Tuple (VElement r) resultRef) context = do
     Just (View viewRef) -> do
       node <- viewNode viewRef
       childrenHistory <- viewChildrenHistory viewRef
-      diff patch
-        { context
-        , parent: node
-        , currentChildren: fromMaybe [] $ childrenHistory !! 0
-        , nextChildren: []
-        }
+      let currentChildren = fromMaybe [] $ childrenHistory !! 0
+      forE 0 (length currentChildren) \i ->
+        patch
+          { context
+          , current: currentChildren !! i
+          , next: Nothing
+          , parentNode: node
+          , nodeIndex: i
+          , moveIndex: Nothing
+          }
       case E.fromNode node of
         Nothing -> pure unit
         Just el -> raf $ r.didDelete el
