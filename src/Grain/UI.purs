@@ -27,21 +27,25 @@ import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Data.Array (length, snoc, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Tuple (Tuple(..))
 import Effect (Effect, forE)
 import Effect.Class (liftEffect)
-import Effect.Ref (Ref, modify, modify_, new, read, write)
+import Effect.Exception (throw)
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain, which)
-import Grain.Effect (sequenceE, traverseE)
+import Grain.Effect (sequenceE)
+import Grain.JSMap (JSMap)
+import Grain.JSMap as JM
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler)
 import Grain.UI.Diff (class HasKey, diff)
 import Grain.UI.Element (allocElement, updateElement)
-import Grain.UI.Util (childNode, createText_, raf)
+import Grain.UI.Util (childNode, createText_, putNode, raf)
+import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Element as E
-import Web.DOM.Node (Node, appendChild, insertBefore, removeChild, setTextContent)
+import Web.DOM.Node (Node, removeChild, setTextContent)
 import Web.DOM.Text as T
 import Web.Event.Event (Event)
 
@@ -243,393 +247,297 @@ mount :: VNode -> Node -> Effect Unit
 mount vnode parentNode = do
   store <- createStore
   styler <- mountStyler
-  archive <- createArchive vnode
+  componentRefs <- JM.new
   patch
-    { context: { store, styler, isSvg: false }
-    , current: Nothing
-    , next: Just archive
+    { context: { isSvg: false, store, styler, componentRefs }
     , parentNode
     , nodeIndex: 0
     , moveIndex: Nothing
+    , current: Nothing
+    , next: Just vnode
     }
+
+
+
+type UIContext =
+  { isSvg :: Boolean
+  , store :: Store
+  , styler :: Styler
+  , componentRefs :: JSMap Node ComponentRef
+  }
+
+switchContext :: String -> UIContext -> UIContext
+switchContext tag context =
+  if context.isSvg
+    then context
+    else context { isSvg = tag == "svg" }
+
+
 
 type PatchArgs =
   { context :: UIContext
-  , current :: Maybe Archive
-  , next :: Maybe Archive
   , parentNode :: Node
   , nodeIndex :: Int
   , moveIndex :: Maybe Int
-  }
-
-type UIContext =
-  { store :: Store
-  , styler :: Styler
-  , isSvg :: Boolean
+  , current :: Maybe VNode
+  , next :: Maybe VNode
   }
 
 patch :: PatchArgs -> Effect Unit
-patch { context, current, next, parentNode, nodeIndex, moveIndex } = do
-  maybeNode <- patchElement current next $ switchContext current next context
-  case maybeNode, current, next of
-    Just node, Nothing, Just _ -> do
-      maybeTarget <- childNode nodeIndex parentNode
-      void case maybeTarget of
-        Nothing -> appendChild node parentNode
-        Just target -> insertBefore node target parentNode
-    Just node, Just _, Nothing ->
+patch { context, parentNode, nodeIndex, moveIndex, current, next } =
+  case current, next of
+    Nothing, Just (VNode _ next') -> do
+      node <- eval { context, target: Nothing, current: Nothing, next: Just next' }
+      void $ putNode nodeIndex node parentNode
+    Just (VNode _ current'), Nothing -> do
+      target <- childNode nodeIndex parentNode
+      node <- eval { context, target, current: Just current', next: Nothing }
       void $ removeChild node parentNode
-    Just node, Just _, Just _ -> do
+    Just (VNode _ current'), Just (VNode _ next') -> do
+      target <- childNode nodeIndex parentNode
+      node <- eval { context, target, current: Just current', next: Just next' }
       case moveIndex of
         Nothing -> pure unit
         Just mi -> do
           let adjustedIdx = if nodeIndex < mi then mi + 1 else mi
-          maybeAfterNode <- childNode adjustedIdx parentNode
-          void case maybeAfterNode of
-            Nothing -> appendChild node parentNode
-            Just afterNode -> insertBefore node afterNode parentNode
-    _, _, _ -> pure unit
+          void $ putNode adjustedIdx node parentNode
+    _, _ ->
+      pure unit
 
-switchContext
-  :: Maybe Archive
-  -> Maybe Archive
-  -> UIContext
-  -> UIContext
-switchContext current next context =
-  case current, next of
-    _, Just (Tuple (VNode _ (VElement r)) _) ->
-      if context.isSvg then context else context { isSvg = isSvg r }
-    Just (Tuple (VNode _ (VElement r)) _), _ ->
-      if context.isSvg then context else context { isSvg = isSvg r }
-    _, _ -> context
-  where
-    isSvg r = r.tagName == "svg"
 
-patchElement
-  :: Maybe Archive
-  -> Maybe Archive
-  -> UIContext
-  -> Effect (Maybe Node)
-patchElement Nothing Nothing _ = pure Nothing
-patchElement Nothing (Just (Tuple (VNode _ next) nextRef)) context =
-  operateCreating (Tuple next nextRef) context
-patchElement (Just (Tuple (VNode _ current) currentRef)) Nothing context =
-  operateDeleting (Tuple current currentRef) context
-patchElement (Just (Tuple (VNode _ current) currentRef)) (Just (Tuple (VNode _ next) nextRef)) context =
-  if shouldUpdate current next
-    then
-      operateUpdating
-        (Tuple current currentRef)
-        (Tuple next nextRef)
-        context
-    else do
-      maybeResult <- read currentRef
-      write maybeResult nextRef
-      case maybeResult of
-        Nothing -> pure Nothing
-        Just (View viewRef) ->
-          Just <$> viewNode viewRef
-        Just (Component componentRef) ->
-          componentNode componentRef
 
-shouldUpdate :: VElement -> VElement -> Boolean
-shouldUpdate (VText current) (VText next) =
-  current /= next
-shouldUpdate (VElement current) (VElement next) =
-  case current.fingerprint, next.fingerprint of
-    Nothing, Nothing -> true
-    cf, nf -> cf /= nf
-shouldUpdate (VComponent current) (VComponent next) =
-  case current.fingerprint, next.fingerprint of
-    Nothing, Nothing -> true
-    cf, nf -> cf /= nf
-shouldUpdate _ _ = true
+type EvalArgs =
+  { context :: UIContext
+  , target :: Maybe Node
+  , current :: Maybe VElement
+  , next :: Maybe VElement
+  }
 
-operateCreating
-  :: Tuple VElement (Ref (Maybe Result))
-  -> UIContext
-  -> Effect (Maybe Node)
-operateCreating (Tuple (VText str) resultRef) _ = do
-  node <- createText_ str <#> T.toNode
-  viewRef <- newViewRef node []
-  write (Just $ View viewRef) resultRef
-  pure $ Just node
-operateCreating (Tuple (VElement r) resultRef) context = do
-  el <- allocElement context.styler context.isSvg r
-  nextChildren <- createArchives r.children
-  let node = E.toNode el
-  forE 0 (length nextChildren) \i ->
-    patch
-      { context
-      , current: Nothing
-      , next: nextChildren !! i
-      , parentNode: node
-      , nodeIndex: i
-      , moveIndex: Nothing
-      }
-  viewRef <- newViewRef node nextChildren
-  write (Just $ View viewRef) resultRef
-  raf $ r.didCreate el
-  pure $ Just node
-operateCreating (Tuple (VComponent r) resultRef) context = do
-  componentRef <- newComponentRef context r.render
-  maybeNode <- evalComponent componentRef
-  write (Just $ Component componentRef) resultRef
-  pure maybeNode
-
-operateDeleting
-  :: Tuple VElement (Ref (Maybe Result))
-  -> UIContext
-  -> Effect (Maybe Node)
-operateDeleting (Tuple (VText _) resultRef) _ = do
-  maybeResult <- read resultRef
-  case maybeResult of
-    Just (View viewRef) ->
-      Just <$> viewNode viewRef
-    _ -> pure Nothing
-operateDeleting (Tuple (VElement r) resultRef) context = do
-  maybeResult <- read resultRef
-  case maybeResult of
-    Just (View viewRef) -> do
-      node <- viewNode viewRef
-      childrenHistory <- viewChildrenHistory viewRef
-      let currentChildren = fromMaybe [] $ childrenHistory !! 0
-      forE 0 (length currentChildren) \i ->
+eval :: EvalArgs -> Effect Node
+eval { context, target, current, next } =
+  case target, current, next of
+    -- Create
+    Nothing, Nothing, Just (VText nt) ->
+      createText_ nt <#> T.toNode
+    Nothing, Nothing, Just (VComponent nc) -> do
+      componentRef <- newComponentRef
+      node <- evalComponent
+        { context
+        , target: Nothing
+        , render: nc.render
+        , componentRef
+        }
+      JM.set node componentRef context.componentRefs
+      pure node
+    Nothing, Nothing, Just (VElement nv) -> do
+      let ctx = switchContext nv.tagName context
+      el <- allocElement ctx.styler ctx.isSvg nv
+      let node = E.toNode el
+      forE 0 (length nv.children) \i ->
         patch
-          { context
-          , current: currentChildren !! i
-          , next: Nothing
+          { context: ctx
           , parentNode: node
           , nodeIndex: i
           , moveIndex: Nothing
+          , current: Nothing
+          , next: nv.children !! i
           }
-      case E.fromNode node of
-        Nothing -> pure unit
-        Just el -> raf $ r.didDelete el
-      pure $ Just node
-    _ -> pure Nothing
-operateDeleting (Tuple (VComponent r) resultRef) _ = do
-  maybeResult <- read resultRef
-  case maybeResult of
-    Just (Component componentRef) -> do
-      unmountComponent componentRef
-      componentNode componentRef
-    _ -> pure Nothing
+      raf $ nv.didCreate el
+      pure node
 
-operateUpdating
-  :: Tuple VElement (Ref (Maybe Result))
-  -> Tuple VElement (Ref (Maybe Result))
-  -> UIContext
-  -> Effect (Maybe Node)
-operateUpdating (Tuple (VText _) cRef) (Tuple (VText n) nRef) _ = do
-  maybeResult <- read cRef
-  case maybeResult of
-    Just (View viewRef) -> do
-      node <- viewNode viewRef
-      setTextContent n node
-      write (Just $ View viewRef) nRef
-      pure $ Just node
-    _ -> pure Nothing
-operateUpdating (Tuple (VElement c) cRef) (Tuple (VElement n) nRef) context = do
-  maybeResult <- read cRef
-  case maybeResult of
-    Just (View viewRef) -> do
-      node <- viewNode viewRef
-      case E.fromNode node of
-        Just el -> do
-          updateElement context.styler context.isSvg c n el
-          childrenHistory <- addViewChildrenHistory n.children viewRef
-          diff patch
-            { context
-            , parent: node
-            , currentChildren: fromMaybe [] $ childrenHistory !! 1
-            , nextChildren: fromMaybe [] $ childrenHistory !! 0
-            }
-          write (Just $ View viewRef) nRef
-          raf $ n.didUpdate el
-          pure $ Just node
-        _ -> pure Nothing
-    _ -> pure Nothing
-operateUpdating (Tuple (VComponent c) cRef) (Tuple (VComponent n) nRef) _ = do
-  maybeResult <- read cRef
-  case maybeResult of
-    Just (Component componentRef) -> do
-      updateComponentRender n.render componentRef
-      maybeNode <- evalComponent componentRef
-      write (Just $ Component componentRef) nRef
-      pure maybeNode
-    _ -> pure Nothing
-operateUpdating _ _ _ = pure Nothing
+    -- Delete
+    Just node, Just (VText _), Nothing ->
+      pure node
+    Just node, Just (VComponent _), Nothing -> do
+      componentRef <- JM.unsafeGet node context.componentRefs
+      unmountComponent
+        { context
+        , target: Just node
+        , componentRef
+        }
+      JM.del node context.componentRefs
+      pure node
+    Just node, Just (VElement cv), Nothing -> do
+      forE 0 (length cv.children) \i ->
+        patch
+          { context
+          , parentNode: node
+          , nodeIndex: 0
+          , moveIndex: Nothing
+          , current: cv.children !! i
+          , next: Nothing
+          }
+      raf $ cv.didDelete $ unsafeCoerce node
+      pure node
 
+    -- Update
+    Just node, Just (VText ct), Just (VText nt) -> do
+      when (ct /= nt) do
+        setTextContent nt node
+      pure node
+    Just node, Just (VComponent cc), Just (VComponent nc) -> do
+      when (isDifferent cc nc) do
+        componentRef <- JM.unsafeGet node context.componentRefs
+        void $ evalComponent
+          { context
+          , target: Just node
+          , render: nc.render
+          , componentRef
+          }
+      pure node
+    Just node, Just (VElement cv), Just (VElement nv) -> do
+      when (isDifferent cv nv) do
+        let el = unsafeCoerce node
+            ctx = switchContext nv.tagName context
+        updateElement ctx.styler ctx.isSvg cv nv el
+        diff patch
+          { context: ctx
+          , parent: node
+          , currentChildren: cv.children
+          , nextChildren: nv.children
+          }
+        raf $ nv.didUpdate el
+      pure node
 
+    _, _, _ ->
+      throw "Renderer can't evaluate vnodes."
 
-type ViewRef = Ref
-  { node :: Node
-  , childrenHistory :: Array (Array Archive)
-  }
-
-newViewRef :: Node -> Array Archive -> Effect ViewRef
-newViewRef node children = new { node, childrenHistory: [ children ] }
-
-addViewChildrenHistory :: Array VNode -> ViewRef -> Effect (Array (Array Archive))
-addViewChildrenHistory vnodes viewRef = do
-  archives <- createArchives vnodes
-  _.childrenHistory <$> flip modify viewRef \r ->
-    r { childrenHistory = archives : r.childrenHistory }
-
-viewNode :: ViewRef -> Effect Node
-viewNode viewRef =
-  read viewRef <#> _.node
-
-viewChildrenHistory :: ViewRef -> Effect (Array (Array Archive))
-viewChildrenHistory viewRef =
-  read viewRef <#> _.childrenHistory
+isDifferent
+  :: forall r
+   . { fingerprint :: Maybe String | r }
+  -> { fingerprint :: Maybe String | r }
+  -> Boolean
+isDifferent { fingerprint: Nothing } { fingerprint: Nothing } =
+  true
+isDifferent { fingerprint: cf } { fingerprint: nf } =
+  cf /= nf
 
 
 
 type ComponentRef = Ref
-  { node :: Maybe Node
-  , rendering :: Boolean
+  { rendering :: Boolean
   , unsubscribers :: Array (Effect Unit)
-  , render :: Render VNode
-  , history :: Array Archive
+  , history :: Array VElement
   , store :: Store
-  , context :: UIContext
-  , portalHistory :: Array Archive
+  , portalHistory :: Array VNode
   }
 
-newComponentRef :: UIContext -> Render VNode -> Effect ComponentRef
-newComponentRef context render = do
+newComponentRef :: Effect ComponentRef
+newComponentRef = do
   store <- createStore
-  new
-    { node: Nothing
-    , rendering: true
+  Ref.new
+    { rendering: true
     , unsubscribers: []
-    , render
     , history: []
     , store
-    , context
     , portalHistory: []
     }
 
-unmountComponent :: ComponentRef -> Effect Unit
-unmountComponent componentRef = do
+type EvalComponentArgs =
+  { context :: UIContext
+  , target :: Maybe Node
+  , render :: Render VNode
+  , componentRef :: ComponentRef
+  }
+
+evalComponent :: EvalComponentArgs -> Effect Node
+evalComponent { context, target, render, componentRef } = do
+  targetRef <- Ref.new target
+
+  let storeSelection =
+        componentStore componentRef
+          <#> { global: context.store, local: _ }
+
+      listenValue :: forall p a. Grain p a => p a -> Effect Unit
+      listenValue proxy = do
+        store <- which proxy <$> storeSelection
+        subscribeGrain proxy evaluateRaf store
+        flip addComponentUnsubscriber componentRef
+          $ unsubscribeGrain proxy evaluateRaf store
+
+      selectValue :: forall p a. Grain p a => p a -> Effect a
+      selectValue proxy =
+        which proxy <$> storeSelection >>= readGrain proxy
+
+      updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
+      updateValue proxy f = do
+        which proxy <$> storeSelection >>= updateGrain proxy f
+
+      portalVNode = getPortal context componentRef
+
+      evaluate = do
+        unlockRendering componentRef
+        triggerUnsubscriber componentRef
+        VNode _ velement <- runRender render
+          { selectValue
+          , listenValue
+          , updateValue
+          , portalVNode
+          }
+        h <- addComponentHistory velement componentRef
+        t <- Ref.read targetRef
+        eval { context, target: t, current: h !! 1, next: h !! 0 }
+
+      evaluateRaf = do
+        locked <- componentRenderingLock componentRef
+        when (not locked) do
+          lockRendering componentRef
+          raf $ void evaluate
+
+  node <- evaluate
+  Ref.write (Just node) targetRef
+  pure node
+
+type UnmountComponentArgs =
+  { context :: UIContext
+  , target :: Maybe Node
+  , componentRef :: ComponentRef
+  }
+
+unmountComponent :: UnmountComponentArgs -> Effect Unit
+unmountComponent { context, target, componentRef } = do
   triggerUnsubscriber componentRef
-  history <- componentHistory componentRef
-  context <- contextFromComponent componentRef
-  node <- patchElement (history !! 0) Nothing context
-  setComponentNode node componentRef
-
-evalComponent :: ComponentRef -> Effect (Maybe Node)
-evalComponent componentRef = do
-  eval
-  componentNode componentRef
-  where
-    storeSelection =
-      { global: _, local: _ }
-        <$> globalStoreFromComponent componentRef
-        <*> localStoreFromComponent componentRef
-
-    selectValue :: forall p a. Grain p a => p a -> Effect a
-    selectValue proxy =
-      which proxy <$> storeSelection >>= readGrain proxy
-
-    listenValue :: forall p a. Grain p a => p a -> Effect Unit
-    listenValue proxy = do
-      store <- which proxy <$> storeSelection
-      subscribeGrain proxy evalRaf store
-      flip addComponentUnsubscriber componentRef
-        $ unsubscribeGrain proxy evalRaf store
-
-    updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
-    updateValue proxy f = do
-      which proxy <$> storeSelection >>= updateGrain proxy f
-
-    portalVNode = getPortal componentRef
-
-    eval = do
-      unlockRendering componentRef
-      triggerUnsubscriber componentRef
-      render <- componentRender componentRef
-      vnode <- runRender render
-        { selectValue
-        , listenValue
-        , updateValue
-        , portalVNode
-        }
-      history <- addComponentHistory vnode componentRef
-      context <- contextFromComponent componentRef
-      node <- patchElement (history !! 1) (history !! 0) context
-      setComponentNode node componentRef
-
-    evalRaf = do
-      locked <- componentRenderingLock componentRef
-      when (not locked) do
-        lockRendering componentRef
-        raf eval
-
-updateComponentRender :: Render VNode -> ComponentRef -> Effect Unit
-updateComponentRender render = modify_ _ { render = render }
-
-setComponentNode :: Maybe Node -> ComponentRef -> Effect Unit
-setComponentNode node componentRef =
-  flip modify_ componentRef _ { node = node }
+  h <- componentHistory componentRef
+  void $ eval { context, target, current: h !! 0, next: Nothing }
 
 lockRendering :: ComponentRef -> Effect Unit
 lockRendering componentRef =
-  flip modify_ componentRef _ { rendering = true }
+  flip Ref.modify_ componentRef _ { rendering = true }
 
 unlockRendering :: ComponentRef -> Effect Unit
 unlockRendering componentRef =
-  flip modify_ componentRef _ { rendering = false }
+  flip Ref.modify_ componentRef _ { rendering = false }
 
 addComponentUnsubscriber :: Effect Unit -> ComponentRef -> Effect Unit
 addComponentUnsubscriber unsubscribe componentRef =
-  flip modify_ componentRef \r ->
+  flip Ref.modify_ componentRef \r ->
     r { unsubscribers = snoc r.unsubscribers unsubscribe }
 
-addComponentHistory :: VNode -> ComponentRef -> Effect (Array Archive)
-addComponentHistory vnode componentRef = do
-  archive <- createArchive vnode
-  _.history <$> flip modify componentRef \r ->
-    r { history = take 2 $ archive : r.history }
-
-componentNode :: ComponentRef -> Effect (Maybe Node)
-componentNode componentRef =
-  read componentRef <#> _.node
-
-componentRender :: ComponentRef -> Effect (Render VNode)
-componentRender componentRef =
-  read componentRef <#> _.render
+addComponentHistory :: VElement -> ComponentRef -> Effect (Array VElement)
+addComponentHistory velement componentRef =
+  _.history <$> flip Ref.modify componentRef \r ->
+    r { history = take 2 $ velement : r.history }
 
 componentRenderingLock :: ComponentRef -> Effect Boolean
 componentRenderingLock componentRef =
-  read componentRef <#> _.rendering
+  Ref.read componentRef <#> _.rendering
 
-componentHistory :: ComponentRef -> Effect (Array Archive)
+componentHistory :: ComponentRef -> Effect (Array VElement)
 componentHistory componentRef =
-  read componentRef <#> _.history
+  Ref.read componentRef <#> _.history
 
-contextFromComponent :: ComponentRef -> Effect UIContext
-contextFromComponent componentRef =
-  read componentRef <#> _.context
-
-globalStoreFromComponent :: ComponentRef -> Effect Store
-globalStoreFromComponent componentRef =
-  contextFromComponent componentRef <#> _.store
-
-localStoreFromComponent :: ComponentRef -> Effect Store
-localStoreFromComponent componentRef =
-  read componentRef <#> _.store
+componentStore :: ComponentRef -> Effect Store
+componentStore componentRef =
+  Ref.read componentRef <#> _.store
 
 triggerUnsubscriber :: ComponentRef -> Effect Unit
 triggerUnsubscriber componentRef = do
-  { unsubscribers } <- read componentRef
+  { unsubscribers } <- Ref.read componentRef
   sequenceE unsubscribers
-  flip modify_ componentRef _ { unsubscribers = [] }
+  flip Ref.modify_ componentRef _ { unsubscribers = [] }
 
-getPortal :: ComponentRef -> Effect Node -> VNode -> VNode
-getPortal componentRef getPortalRoot vnode =
+getPortal :: UIContext -> ComponentRef -> Effect Node -> VNode -> VNode
+getPortal context componentRef getPortalRoot vnode =
   element "span"
     # didCreate (const patchPortal)
     # didUpdate (const patchPortal)
@@ -637,50 +545,33 @@ getPortal componentRef getPortalRoot vnode =
   where
     patchPortal = do
       parentNode <- getPortalRoot
-      context <- contextFromComponent componentRef
-      history <- addPortalHistory vnode componentRef
+      h <- addPortalHistory vnode componentRef
       patch
         { context
-        , current: history !! 1
-        , next: history !! 0
         , parentNode
         , nodeIndex: 0
         , moveIndex: Nothing
+        , current: h !! 1
+        , next: h !! 0
         }
 
     deletePortal = do
       parentNode <- getPortalRoot
-      context <- contextFromComponent componentRef
-      history <- componentPortalHistory componentRef
+      h <- componentPortalHistory componentRef
       patch
         { context
-        , current: history !! 0
-        , next: Nothing
         , parentNode
         , nodeIndex: 0
         , moveIndex: Nothing
+        , current: h !! 0
+        , next: Nothing
         }
 
-componentPortalHistory :: ComponentRef -> Effect (Array Archive)
+componentPortalHistory :: ComponentRef -> Effect (Array VNode)
 componentPortalHistory componentRef =
-  read componentRef <#> _.portalHistory
+  Ref.read componentRef <#> _.portalHistory
 
-addPortalHistory :: VNode -> ComponentRef -> Effect (Array Archive)
-addPortalHistory vnode componentRef = do
-  archive <- createArchive vnode
-  _.portalHistory <$> flip modify componentRef \r ->
-    r { portalHistory = take 2 $ archive : r.portalHistory }
-
-
-
-type Archive = Tuple VNode (Ref (Maybe Result))
-
-data Result
-  = View ViewRef
-  | Component ComponentRef
-
-createArchive :: VNode -> Effect Archive
-createArchive vnode = Tuple vnode <$> new Nothing
-
-createArchives :: Array VNode -> Effect (Array Archive)
-createArchives vnodes = traverseE createArchive vnodes
+addPortalHistory :: VNode -> ComponentRef -> Effect (Array VNode)
+addPortalHistory vnode componentRef =
+  _.portalHistory <$> flip Ref.modify componentRef \r ->
+    r { portalHistory = take 2 $ vnode : r.portalHistory }

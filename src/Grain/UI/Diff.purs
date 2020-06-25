@@ -21,9 +21,6 @@ class HasKey a where
 instance hasKeyInt :: HasKey Int where
   getKey _ = show
 
-instance hasKeyTuple :: (HasKey a) => HasKey (Tuple a b) where
-  getKey idx (Tuple x _) = getKey idx x
-
 type PatchArgs ctx parent child =
   { context :: ctx
   , current :: Maybe child

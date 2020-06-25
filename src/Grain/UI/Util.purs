@@ -1,6 +1,7 @@
 module Grain.UI.Util
   ( raf
   , childNode
+  , putNode
   , createText_
   , createElement_
   , createElementNS_
@@ -26,7 +27,7 @@ import Effect (Effect)
 import Effect.Uncurried (EffectFn3, EffectFn4, runEffectFn3, runEffectFn4)
 import Web.DOM.Document (Document, createElement, createElementNS, createTextNode)
 import Web.DOM.Element (Element)
-import Web.DOM.Node (Node, childNodes)
+import Web.DOM.Node (Node, appendChild, childNodes, insertBefore)
 import Web.DOM.NodeList (item)
 import Web.DOM.Text (Text)
 import Web.HTML (window)
@@ -38,6 +39,13 @@ raf f = void $ window >>= requestAnimationFrame f
 
 childNode :: Int -> Node -> Effect (Maybe Node)
 childNode i node = childNodes node >>= item i
+
+putNode :: Int -> Node -> Node -> Effect Node
+putNode i child parent = do
+  maybeTarget <- childNode i parent
+  case maybeTarget of
+    Nothing -> appendChild child parent
+    Just target -> insertBefore child target parent
 
 createText_ :: String -> Effect Text
 createText_ text = doc >>= createTextNode text

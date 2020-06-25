@@ -4,14 +4,16 @@ module Grain.JSMap
   , get
   , set
   , del
+  , unsafeGet
   ) where
 
 import Prelude
 
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe, fromJust)
 import Data.Nullable (Nullable, toMaybe)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn2, EffectFn3, runEffectFn2, runEffectFn3)
+import Partial.Unsafe (unsafePartial)
 
 foreign import data JSMap :: Type -> Type -> Type
 
@@ -25,6 +27,9 @@ set k v m = runEffectFn3 setImpl k v m
 
 del :: forall a b. a -> JSMap a b -> Effect Unit
 del k m = runEffectFn2 delImpl k m
+
+unsafeGet :: forall a b. a -> JSMap a b -> Effect b
+unsafeGet k m = unsafePartial $ fromJust <$> get k m
 
 foreign import getImpl :: forall a b. EffectFn2 a (JSMap a b) (Nullable b)
 foreign import setImpl :: forall a b. EffectFn3 a b (JSMap a b) Unit
