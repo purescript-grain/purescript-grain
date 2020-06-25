@@ -15,16 +15,14 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert, lookup)
-import Grain.Class (class Grain, initialState, keySuffix, typeRefOf)
+import Grain.Class (class Grain, initialState, keyOf, typeRefOf)
 import Grain.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
-import Grain.TypeKeyRef (TypeKeyRef)
-import Grain.TypeKeyRef as TKRef
+import Grain.JSMap (JSMap)
+import Grain.JSMap as JM
+import Grain.TypeRef (TypeRef)
 import Unsafe.Coerce (unsafeCoerce)
 
-newtype Store = Store
-  { typeKeyRef :: TypeKeyRef
-  , partsRef :: Ref (Object Part)
-  }
+newtype Store = Store (JSMap TypeRef (Ref (Object Part)))
 
 type Part =
   { emitter :: Emitter
@@ -32,10 +30,7 @@ type Part =
   }
 
 createStore :: Effect Store
-createStore = do
-  typeKeyRef <- TKRef.new
-  partsRef <- Ref.new empty
-  pure $ Store { typeKeyRef, partsRef }
+createStore = Store <$> JM.new
 
 readGrain
   :: forall p a
@@ -82,31 +77,37 @@ updateGrain proxy f store = do
   Ref.modify_ (unsafeCoerce f) valueRef
   emit emitter
 
-readPartKey
-  :: forall p a
-   . Grain p a
-  => p a
-  -> Store
-  -> Effect String
-readPartKey proxy (Store { typeKeyRef }) = do
-  typeKey <- TKRef.read (typeRefOf proxy) typeKeyRef
-  pure $ typeKey <> keySuffix proxy
-
 lookupPart
   :: forall p a
    . Grain p a
   => p a
   -> Store
   -> Effect Part
-lookupPart proxy store@(Store { partsRef }) = do
-  partKey <- readPartKey proxy store
-  maybePart <- lookup partKey <$> Ref.read partsRef
-  case maybePart of
+lookupPart proxy store = do
+  partsRef <- lookupPartsRef proxy store
+  parts <- Ref.read partsRef
+  case lookup (keyOf proxy) parts of
     Just part -> pure part
     Nothing -> do
       value <- initialState proxy
       valueRef <- Ref.new $ unsafeToForeign value
       emitter <- createEmitter
       let part = { emitter, valueRef }
-      Ref.modify_ (insert partKey part) partsRef
+      Ref.modify_ (insert (keyOf proxy) part) partsRef
       pure part
+
+lookupPartsRef
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Store
+  -> Effect (Ref (Object Part))
+lookupPartsRef proxy (Store m) = do
+  maybePartsRef <- JM.get (typeRefOf proxy) m
+  case maybePartsRef of
+    Just partsRef ->
+      pure partsRef
+    Nothing -> do
+      partsRef <- Ref.new empty
+      JM.set (typeRefOf proxy) partsRef m
+      pure partsRef
