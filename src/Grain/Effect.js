@@ -7,8 +7,6 @@ exports.sequenceEImpl = function(fs) {
     fs[i]();
     i = (i + 1) | 0;
   }
-
-  return {};
 }
 
 exports.forObjectEImpl = function(obj, f) {
@@ -19,6 +17,4 @@ exports.forObjectEImpl = function(obj, f) {
     f(k)(obj[k])();
     i = (i + 1) | 0;
   }
-
-  return {};
 }

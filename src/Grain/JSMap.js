@@ -10,10 +10,8 @@ exports.getImpl = function(k, m) {
 
 exports.setImpl = function(k, v, m) {
   m.set(k, v);
-  return {};
 }
 
 exports.delImpl = function(k, m) {
   m.delete(k);
-  return {};
 }
