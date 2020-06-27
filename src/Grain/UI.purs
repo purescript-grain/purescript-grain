@@ -249,7 +249,13 @@ mount vnode parentNode = do
   styler <- mountStyler
   componentRefs <- JM.new
   patch
-    { context: { isSvg: false, store, styler, componentRefs }
+    { context:
+        { isSvg: false
+        , deleting: false
+        , store
+        , styler
+        , componentRefs
+        }
     , parentNode
     , nodeIndex: 0
     , moveIndex: Nothing
@@ -261,16 +267,23 @@ mount vnode parentNode = do
 
 type UIContext =
   { isSvg :: Boolean
+  , deleting :: Boolean
   , store :: Store
   , styler :: Styler
   , componentRefs :: JSMap Node ComponentRef
   }
 
-switchContext :: String -> UIContext -> UIContext
-switchContext tag context =
+switchToSvg :: String -> UIContext -> UIContext
+switchToSvg tag context =
   if context.isSvg
     then context
     else context { isSvg = tag == "svg" }
+
+switchToDeleting :: UIContext -> UIContext
+switchToDeleting context =
+  if context.deleting
+    then context
+    else context { deleting = true }
 
 
 
@@ -290,9 +303,11 @@ patch { context, parentNode, nodeIndex, moveIndex, current, next } =
       node <- eval { context, target: Nothing, current: Nothing, next: Just next' }
       void $ putNode nodeIndex node parentNode
     Just (VNode _ current'), Nothing -> do
+      let ctx = switchToDeleting context
       target <- childNode nodeIndex parentNode
-      node <- eval { context, target, current: Just current', next: Nothing }
-      void $ removeChild node parentNode
+      node <- eval { context: ctx, target, current: Just current', next: Nothing }
+      when (not context.deleting) do
+        void $ removeChild node parentNode
     Just (VNode _ current'), Just (VNode _ next') -> do
       target <- childNode nodeIndex parentNode
       node <- eval { context, target, current: Just current', next: Just next' }
@@ -330,7 +345,7 @@ eval { context, target, current, next } =
       JM.set node componentRef context.componentRefs
       pure node
     Nothing, Nothing, Just (VElement nv) -> do
-      let ctx = switchContext nv.tagName context
+      let ctx = switchToSvg nv.tagName context
       el <- allocElement ctx.styler ctx.isSvg nv
       let node = E.toNode el
       forE 0 (length nv.children) \i ->
@@ -362,7 +377,7 @@ eval { context, target, current, next } =
         patch
           { context
           , parentNode: node
-          , nodeIndex: 0
+          , nodeIndex: i
           , moveIndex: Nothing
           , current: cv.children !! i
           , next: Nothing
@@ -388,7 +403,7 @@ eval { context, target, current, next } =
     Just node, Just (VElement cv), Just (VElement nv) -> do
       when (isDifferent cv nv) do
         let el = unsafeCoerce node
-            ctx = switchContext nv.tagName context
+            ctx = switchToSvg nv.tagName context
         updateElement ctx.styler ctx.isSvg cv nv el
         diff patch
           { context: ctx
