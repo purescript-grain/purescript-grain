@@ -11,7 +11,7 @@ import Data.Array (length, snoc, unsafeIndex, (!!), (..))
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
+import Effect (Effect, forE)
 import Foreign.Object as O
 import Partial.Unsafe (unsafePartial)
 
@@ -128,81 +128,105 @@ diff
   => Patcher ctx parent child
   -> DiffArgs ctx parent child
   -> Effect Unit
-diff patch { context, parent, currentChildren, nextChildren } = do
-  state <- storeKeyToIdx <$> tailRecM takeDiffPerformant initialState
-  tailRecM takeDiff state
-  where
-    initialState = initState currentChildren nextChildren
+diff patch { context, parent, currentChildren, nextChildren } =
+  case length currentChildren, length nextChildren of
+    0, 0 ->
+      pure unit
+    0, nextLength ->
+      forE 0 nextLength \i ->
+        patch
+          { context
+          , parentNode: parent
+          , nodeIndex: i
+          , moveIndex: Nothing
+          , current: Nothing
+          , next: nextChildren !! i
+          }
+    currentLength, 0 ->
+      forE 0 currentLength \i ->
+        patch
+          { context
+          , parentNode: parent
+          , nodeIndex: 0
+          , moveIndex: Nothing
+          , current: currentChildren !! i
+          , next: Nothing
+          }
+    _, _ -> do
+      state <- storeKeyToIdx <$> tailRecM takeDiffPerformant initialState
+      tailRecM takeDiff state
+      where
+        initialState = initState currentChildren nextChildren
 
-    equalKey (Just c) (Just n) = c == n
-    equalKey _ _ = false
+        equalKey (Just c) (Just n) = c == n
+        equalKey _ _ = false
 
-    takeDiffPerformant s
-      | s.currentStart > s.currentEnd || s.nextStart > s.nextEnd = pure $ Done s
-      | equalKey (getKey s.currentStart <$> cursorCurrentStart s) (getKey s.nextStart <$> cursorNextStart s) = do
-          patch
-            { context
-            , current: cursorCurrentStart s
-            , next: cursorNextStart s
-            , parentNode: parent
-            , nodeIndex: s.currentStart
-            , moveIndex: Nothing
-            }
-          pure $ Loop $ forwardCurrentCursor >>> forwardNextCursor $ s
-      | equalKey (getKey s.currentEnd <$> cursorCurrentEnd s) (getKey s.nextEnd <$> cursorNextEnd s) = do
-          patch
-            { context
-            , current: cursorCurrentEnd s
-            , next: cursorNextEnd s
-            , parentNode: parent
-            , nodeIndex: s.currentEnd
-            , moveIndex: Nothing
-            }
-          pure $ Loop $ backwardCurrentCursor >>> backwardNextCursor $ s
-      | otherwise = pure $ Done s
+        takeDiffPerformant s
+          | s.currentStart > s.currentEnd || s.nextStart > s.nextEnd = pure $ Done s
+          | equalKey (getKey s.currentStart <$> cursorCurrentStart s) (getKey s.nextStart <$> cursorNextStart s) = do
+              patch
+                { context
+                , current: cursorCurrentStart s
+                , next: cursorNextStart s
+                , parentNode: parent
+                , nodeIndex: s.currentStart
+                , moveIndex: Nothing
+                }
+              pure $ Loop $ forwardCurrentCursor >>> forwardNextCursor $ s
+          | equalKey (getKey s.currentEnd <$> cursorCurrentEnd s) (getKey s.nextEnd <$> cursorNextEnd s) = do
+              patch
+                { context
+                , current: cursorCurrentEnd s
+                , next: cursorNextEnd s
+                , parentNode: parent
+                , nodeIndex: s.currentEnd
+                , moveIndex: Nothing
+                }
+              pure $ Loop $ backwardCurrentCursor >>> backwardNextCursor $ s
+          | otherwise = pure $ Done s
 
-    takeDiff s
-      | s.nextStart <= s.nextEnd =
-          let cursorNext = unsafePartial $ unsafeIndex s.nexts s.nextStart
-              nextKey = getKey s.nextStart cursorNext
-           in case O.lookup nextKey s.keyToIndex of
-                Nothing -> do
-                  patch
-                    { context
-                    , current: Nothing
-                    , next: Just cursorNext
-                    , parentNode: parent
-                    , nodeIndex: s.nextStart
-                    , moveIndex: Nothing
-                    }
-                  pure $ Loop $ markRealAdding s.nextStart
-                    >>> forwardNextCursor $ s
-                Just currentIdx -> do
-                  let sourceIdx = realSourceIdx currentIdx s
-                      targetIdx = s.nextStart
-                  patch
-                    { context
-                    , current: s.currents !! currentIdx
-                    , next: Just cursorNext
-                    , parentNode: parent
-                    , nodeIndex: sourceIdx
-                    , moveIndex: Just targetIdx
-                    }
-                  pure $ Loop $ markRealMove sourceIdx targetIdx
-                    >>> markProcessKey nextKey
-                    >>> forwardNextCursor $ s
-      | O.size s.keyToIndex > 0 = do
-          let currentKey = unsafePartial $ unsafeIndex (O.keys s.keyToIndex) 0
-              currentIdx = unsafePartial $ fromJust $ O.lookup currentKey s.keyToIndex
-              sourceIdx = realSourceIdx currentIdx s
-          patch
-            { context
-            , current: s.currents !! currentIdx
-            , next: Nothing
-            , parentNode: parent
-            , nodeIndex: sourceIdx
-            , moveIndex: Nothing
-            }
-          pure $ Loop $ markRealDeleting sourceIdx
-            >>> markProcessKey currentKey $ s
-      | otherwise = pure $ Done unit
+        takeDiff s
+          | s.nextStart <= s.nextEnd =
+              let cursorNext = unsafePartial $ unsafeIndex s.nexts s.nextStart
+                  nextKey = getKey s.nextStart cursorNext
+               in case O.lookup nextKey s.keyToIndex of
+                    Nothing -> do
+                      patch
+                        { context
+                        , current: Nothing
+                        , next: Just cursorNext
+                        , parentNode: parent
+                        , nodeIndex: s.nextStart
+                        , moveIndex: Nothing
+                        }
+                      pure $ Loop $ markRealAdding s.nextStart
+                        >>> forwardNextCursor $ s
+                    Just currentIdx -> do
+                      let sourceIdx = realSourceIdx currentIdx s
+                          targetIdx = s.nextStart
+                      patch
+                        { context
+                        , current: s.currents !! currentIdx
+                        , next: Just cursorNext
+                        , parentNode: parent
+                        , nodeIndex: sourceIdx
+                        , moveIndex: Just targetIdx
+                        }
+                      pure $ Loop $ markRealMove sourceIdx targetIdx
+                        >>> markProcessKey nextKey
+                        >>> forwardNextCursor $ s
+          | O.size s.keyToIndex > 0 = do
+              let currentKey = unsafePartial $ unsafeIndex (O.keys s.keyToIndex) 0
+                  currentIdx = unsafePartial $ fromJust $ O.lookup currentKey s.keyToIndex
+                  sourceIdx = realSourceIdx currentIdx s
+              patch
+                { context
+                , current: s.currents !! currentIdx
+                , next: Nothing
+                , parentNode: parent
+                , nodeIndex: sourceIdx
+                , moveIndex: Nothing
+                }
+              pure $ Loop $ markRealDeleting sourceIdx
+                >>> markProcessKey currentKey $ s
+          | otherwise = pure $ Done unit
