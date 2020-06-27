@@ -16,36 +16,50 @@ import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 import Web.Event.EventTarget (eventListener)
 
-allocHandlers
-  :: Object (Event -> Effect Unit)
-  -> Element
-  -> Effect Unit
-allocHandlers handlers el =
-  forObjectE handlers \name handler ->
-    setHandler name handler el
+type AllocArgs =
+  { nexts :: Object (Event -> Effect Unit)
+  , element :: Element
+  }
 
-updateHandlers
-  :: Object (Event -> Effect Unit)
-  -> Object (Event -> Effect Unit)
-  -> Element
-  -> Effect Unit
-updateHandlers currents nexts el =
-  let names = union (keys currents) (keys nexts)
+allocHandlers :: AllocArgs -> Effect Unit
+allocHandlers args =
+  forObjectE args.nexts \name handler ->
+    setHandler { name, handler, element: args.element }
+
+type UpdateArgs =
+  { currents :: Object (Event -> Effect Unit)
+  , nexts :: Object (Event -> Effect Unit)
+  , element :: Element
+  }
+
+updateHandlers :: UpdateArgs -> Effect Unit
+updateHandlers args =
+  let names = union (keys args.currents) (keys args.nexts)
       updateByName name =
-        case lookup name currents, lookup name nexts of
-          Nothing, Nothing -> pure unit
-          Just _, Nothing -> removeHandler name el
-          _, Just handler -> setHandler name handler el
+        case lookup name args.currents, lookup name args.nexts of
+          Nothing, Nothing ->
+            pure unit
+          Just _, Nothing ->
+            removeHandler { name, element: args.element }
+          _, Just handler ->
+            setHandler { name, handler, element: args.element }
    in foreachE names updateByName
 
-setHandler
-  :: String
-  -> (Event -> Effect Unit)
-  -> Element
-  -> Effect Unit
-setHandler name handler el = do
-  listener <- eventListener handler
-  setAny name listener el
+type SetArgs =
+  { name :: String
+  , handler :: Event -> Effect Unit
+  , element :: Element
+  }
 
-removeHandler :: String -> Element -> Effect Unit
-removeHandler name = setAny name null
+setHandler :: SetArgs -> Effect Unit
+setHandler args = do
+  listener <- eventListener args.handler
+  setAny args.name listener args.element
+
+type RemoveArgs =
+  { name :: String
+  , element :: Element
+  }
+
+removeHandler :: RemoveArgs -> Effect Unit
+removeHandler args = setAny args.name null args.element

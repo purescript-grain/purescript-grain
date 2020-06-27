@@ -346,7 +346,11 @@ eval { context, target, current, next } =
       pure node
     Nothing, Nothing, Just (VElement nv) -> do
       let ctx = switchToSvg nv.tagName context
-      el <- allocElement ctx.styler ctx.isSvg nv
+      el <- allocElement
+        { isSvg: ctx.isSvg
+        , styler: ctx.styler
+        , next: nv
+        }
       let node = E.toNode el
       forE 0 (length nv.children) \i ->
         patch
@@ -404,7 +408,13 @@ eval { context, target, current, next } =
       when (isDifferent cv nv) do
         let el = unsafeCoerce node
             ctx = switchToSvg nv.tagName context
-        updateElement ctx.styler ctx.isSvg cv nv el
+        updateElement
+          { isSvg: ctx.isSvg
+          , styler: ctx.styler
+          , current: cv
+          , next: nv
+          , element: el
+          }
         diff patch
           { context: ctx
           , parent: node

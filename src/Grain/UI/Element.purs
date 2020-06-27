@@ -21,28 +21,48 @@ type VElementPart r =
   | r
   }
 
-allocElement
-  :: forall r
-   . Styler
-  -> Boolean
-  -> VElementPart r
-  -> Effect Element
-allocElement styler isSvg { tagName, props, handlers } = do
-  el <- if isSvg
-    then createElementNS_ tagName
-    else createElement_ tagName
-  allocProps styler isSvg props el
-  allocHandlers handlers el
+type AllocArgs r =
+  { isSvg :: Boolean
+  , styler :: Styler
+  , next :: VElementPart r
+  }
+
+allocElement :: forall r. AllocArgs r -> Effect Element
+allocElement args = do
+  el <- if args.isSvg
+    then createElementNS_ args.next.tagName
+    else createElement_ args.next.tagName
+  allocProps
+    { isSvg: args.isSvg
+    , styler: args.styler
+    , nexts: args.next.props
+    , element: el
+    }
+  allocHandlers
+    { nexts: args.next.handlers
+    , element: el
+    }
   pure el
 
-updateElement
-  :: forall r
-   . Styler
-  -> Boolean
-  -> VElementPart r
-  -> VElementPart r
-  -> Element
-  -> Effect Unit
-updateElement styler isSvg current next el = do
-  updateProps styler isSvg current.props next.props el
-  updateHandlers current.handlers next.handlers el
+type UpdateArgs r =
+  { isSvg :: Boolean
+  , styler :: Styler
+  , current :: VElementPart r
+  , next :: VElementPart r
+  , element :: Element
+  }
+
+updateElement :: forall r. UpdateArgs r -> Effect Unit
+updateElement args = do
+  updateProps
+    { isSvg: args.isSvg
+    , styler: args.styler
+    , currents: args.current.props
+    , nexts: args.next.props
+    , element: args.element
+    }
+  updateHandlers
+    { currents: args.current.handlers
+    , nexts: args.next.handlers
+    , element: args.element
+    }
