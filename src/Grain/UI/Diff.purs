@@ -11,8 +11,9 @@ import Data.Array (length, snoc, unsafeIndex, (!!), (..))
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Tuple (Tuple(..))
-import Effect (Effect, forE)
+import Effect (Effect)
 import Foreign.Object as O
+import Grain.Effect (forE)
 import Partial.Unsafe (unsafePartial)
 
 class HasKey a where

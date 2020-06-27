@@ -8,9 +8,9 @@ import Prelude
 import Data.Array (filter, notElem, snoc, union)
 import Data.Maybe (Maybe(..))
 import Data.String (joinWith)
-import Effect (Effect, foreachE)
+import Effect (Effect)
 import Foreign.Object (Object, keys, lookup)
-import Grain.Effect (forObjectE)
+import Grain.Effect (forObjectE, foreachE)
 import Grain.Styler (Styler, registerStyle)
 import Grain.UI.Util (classNames, hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
 import Web.DOM.DOMTokenList as DTL
