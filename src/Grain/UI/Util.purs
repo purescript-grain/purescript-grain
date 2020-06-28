@@ -7,7 +7,6 @@ module Grain.UI.Util
   , createElementNS_
   , setAttributeNS_
   , removeAttributeNS_
-  , classNames
   , hasXlinkPrefix
   , setAny
   , isProperty
@@ -16,10 +15,8 @@ module Grain.UI.Util
 
 import Prelude
 
-import Data.Array (filter)
 import Data.Function.Uncurried (Fn2, runFn2)
 import Data.Maybe (Maybe(..))
-import Data.String (Pattern(..), null, split)
 import Data.String.Regex (Regex, replace, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -65,9 +62,6 @@ setAttributeNS_ name val el =
 removeAttributeNS_ :: String -> Element -> Effect Unit
 removeAttributeNS_ name el =
   removeAttributeNS xlinkNameSpace (replace xlinkRegex "" name) el
-
-classNames :: String -> Array String
-classNames val = filter (not <<< null) $ split (Pattern " ") val
 
 hasXlinkPrefix :: String -> Boolean
 hasXlinkPrefix = test xlinkRegex

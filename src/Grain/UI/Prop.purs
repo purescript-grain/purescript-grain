@@ -5,16 +5,14 @@ module Grain.UI.Prop
 
 import Prelude
 
-import Data.Array (filter, notElem, snoc, union)
+import Data.Array (union)
 import Data.Maybe (Maybe(..))
-import Data.String (joinWith)
 import Effect (Effect)
-import Foreign.Object (Object, keys, lookup)
+import Foreign.Object (Object, delete, keys, lookup)
 import Grain.Effect (forObjectE, foreachE)
 import Grain.Styler (Styler, registerStyle)
-import Grain.UI.Util (classNames, hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
-import Web.DOM.DOMTokenList as DTL
-import Web.DOM.Element (Element, classList, getAttribute, removeAttribute, setAttribute)
+import Grain.UI.Util (hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
+import Web.DOM.Element (Element, removeAttribute, setAttribute)
 
 type AllocArgs =
   { isSvg :: Boolean
@@ -24,14 +22,14 @@ type AllocArgs =
   }
 
 allocProps :: AllocArgs -> Effect Unit
-allocProps args =
-  forObjectE args.nexts \name val ->
+allocProps args = do
+  args' <- allocClassName args
+  forObjectE args'.nexts \name val ->
     setProp
-      { isSvg: args.isSvg
-      , styler: args.styler
+      { isSvg: args'.isSvg
       , name
       , val
-      , element: args.element
+      , element: args'.element
       }
 
 type UpdateArgs =
@@ -43,63 +41,42 @@ type UpdateArgs =
   }
 
 updateProps :: UpdateArgs -> Effect Unit
-updateProps args =
-  foreachE names updateByName
-  where
-    names = union (keys args.currents) (keys args.nexts)
-    updateByName name =
-      case lookup name args.currents, lookup name args.nexts of
-        Nothing, Nothing ->
+updateProps args = do
+  args' <- updateClassName args
+  let names = union (keys args'.currents) (keys args'.nexts)
+  foreachE names $ updateByName args'
+
+updateByName :: UpdateArgs -> String -> Effect Unit
+updateByName args name =
+  case lookup name args.currents, lookup name args.nexts of
+    Nothing, Nothing ->
+      pure unit
+    Just _, Nothing ->
+      removeProp
+        { isSvg: args.isSvg
+        , name
+        , element: args.element
+        }
+    Nothing, Just n ->
+      setProp
+        { isSvg: args.isSvg
+        , name
+        , val: n
+        , element: args.element
+        }
+    Just c, Just n
+      | c == n ->
           pure unit
-        Just c, Nothing ->
-          removeProp
-            { isSvg: args.isSvg
-            , name
-            , val: c
-            , element: args.element
-            }
-        Nothing, Just n ->
+      | otherwise ->
           setProp
             { isSvg: args.isSvg
-            , styler: args.styler
             , name
             , val: n
             , element: args.element
             }
-        Just c, Just n
-          | c == n ->
-              pure unit
-          | notElem name [ "class", "className" ] ->
-              setProp
-                { isSvg: args.isSvg
-                , styler: args.styler
-                , name
-                , val: n
-                , element: args.element
-                }
-          | otherwise ->
-              let currentClasses = classNames c
-                  nextClasses = classNames n
-                  removeTargets = filter (flip notElem nextClasses) currentClasses
-                  addTargets = filter (flip notElem currentClasses) nextClasses
-               in do
-                  removeProp
-                    { isSvg: args.isSvg
-                    , name
-                    , val: joinWith " " removeTargets
-                    , element: args.element
-                    }
-                  setProp
-                    { isSvg: args.isSvg
-                    , styler: args.styler
-                    , name
-                    , val: joinWith " " addTargets
-                    , element: args.element
-                    }
 
 type SetArgs =
   { isSvg :: Boolean
-  , styler :: Styler
   , name :: String
   , val :: String
   , element :: Element
@@ -108,21 +85,6 @@ type SetArgs =
 setProp :: SetArgs -> Effect Unit
 setProp args =
   case args.name of
-    "css" -> do
-      generatedClassName <- registerStyle args.val args.styler
-      removeProp
-        { isSvg: args.isSvg
-        , name: "css"
-        , val: "dummyVal"
-        , element: args.element
-        }
-      setStylerAttribute generatedClassName args.element
-      addClass args.isSvg generatedClassName args.element
-    "class" ->
-      setProp args { name = "className" }
-    "className" ->
-      foreachE (classNames args.val) do
-        flip (addClass args.isSvg) args.element
     "style" ->
       setAttribute "style" args.val args.element
     "list" ->
@@ -145,24 +107,12 @@ setProp args =
 type RemoveArgs =
   { isSvg :: Boolean
   , name :: String
-  , val :: String
   , element :: Element
   }
 
 removeProp :: RemoveArgs -> Effect Unit
 removeProp args =
   case args.name of
-    "css" -> do
-      maybeClassName <- getStylerAttribute args.element
-      case maybeClassName of
-        Nothing -> pure unit
-        Just generatedClassName ->
-          removeClass args.isSvg generatedClassName args.element
-    "class" ->
-      removeProp args { name = "className" }
-    "className" ->
-      foreachE (classNames args.val) do
-        flip (removeClass args.isSvg) args.element
     "style" ->
       removeAttribute "style" args.element
     "list" ->
@@ -179,42 +129,49 @@ removeProp args =
             setAny args.name "" args.element
           removeAttribute args.name args.element
 
-addClass :: Boolean -> String -> Element -> Effect Unit
-addClass isSvg = if isSvg then addSvgClass else addStandardClass
-
-addStandardClass :: String -> Element -> Effect Unit
-addStandardClass val el = classList el >>= flip DTL.add val
-
-addSvgClass :: String -> Element -> Effect Unit
-addSvgClass val el = do
-  maybeClassStr <- getAttribute "class" el
-  case maybeClassStr of
+allocClassName :: AllocArgs -> Effect AllocArgs
+allocClassName args = do
+  mn <- getClassName args.styler args.nexts
+  case mn of
     Nothing ->
-      setAttribute "class" val el
-    Just current ->
-      let next = joinWith " " $ snoc (classNames current) val
-       in setAttribute "class" next el
+      pure unit
+    Just n ->
+      if args.isSvg
+        then setAttribute "class" n args.element
+        else setAny "className" n args.element
+  pure args
+    { nexts = delete "css" $ delete "className" args.nexts
+    }
 
-removeClass :: Boolean -> String -> Element -> Effect Unit
-removeClass isSvg = if isSvg then removeSvgClass else removeStandardClass
+updateClassName :: UpdateArgs -> Effect UpdateArgs
+updateClassName args = do
+  mc <- getClassName args.styler args.currents
+  mn <- getClassName args.styler args.nexts
+  case mc, mn of
+    Nothing, Nothing ->
+      pure unit
+    Just _, Nothing -> do
+      when (not args.isSvg) do
+        setAny "className" "" args.element
+      removeAttribute "class" args.element
+    _, Just n ->
+      if args.isSvg
+        then setAttribute "class" n args.element
+        else setAny "className" n args.element
+  pure args
+    { currents = delete "css" $ delete "className" args.currents
+    , nexts = delete "css" $ delete "className" args.nexts
+    }
 
-removeStandardClass :: String -> Element -> Effect Unit
-removeStandardClass val el = classList el >>= flip DTL.remove val
-
-removeSvgClass :: String -> Element -> Effect Unit
-removeSvgClass val el = do
-  maybeClassStr <- getAttribute "class" el
-  case maybeClassStr of
-    Nothing -> pure unit
-    Just current ->
-      let next = joinWith " " $ filter (_ /= val) $ classNames current
-       in setAttribute "class" next el
-
-getStylerAttribute :: Element -> Effect (Maybe String)
-getStylerAttribute = getAttribute stylerAttributeName
-
-setStylerAttribute :: String -> Element -> Effect Unit
-setStylerAttribute = setAttribute stylerAttributeName
-
-stylerAttributeName :: String
-stylerAttributeName = "data-grain-styler-class"
+getClassName :: Styler -> Object String -> Effect (Maybe String)
+getClassName styler props =
+  case lookup "css" props, lookup "className" props of
+    Nothing, Nothing ->
+      pure Nothing
+    Nothing, Just cls ->
+      pure $ Just cls
+    Just css, Nothing ->
+      Just <$> registerStyle css styler
+    Just css, Just cls -> do
+      cls' <- registerStyle css styler
+      pure $ Just $ cls' <> " " <> cls
