@@ -361,7 +361,7 @@ eval { context, target, current, next } =
           , current: Nothing
           , next: nv.children !! i
           }
-      raf $ nv.didCreate el
+      nv.didCreate el
       pure node
 
     -- Delete
@@ -386,7 +386,7 @@ eval { context, target, current, next } =
           , current: cv.children !! i
           , next: Nothing
           }
-      raf $ cv.didDelete $ unsafeCoerce node
+      cv.didDelete $ unsafeCoerce node
       pure node
 
     -- Update
@@ -421,7 +421,7 @@ eval { context, target, current, next } =
           , currentChildren: cv.children
           , nextChildren: nv.children
           }
-        raf $ nv.didUpdate el
+        nv.didUpdate el
       pure node
 
     _, _, _ ->
