@@ -5,11 +5,11 @@ module Grain.UI.Prop
 
 import Prelude
 
-import Data.Array (union)
+import Data.Array (filter, union)
 import Data.Maybe (Maybe(..))
+import Data.Tuple (Tuple(..), fst, lookup)
 import Effect (Effect)
-import Foreign.Object (Object, delete, keys, lookup)
-import Grain.Effect (forObjectE, foreachE)
+import Grain.Effect (foreachE)
 import Grain.Styler (Styler, registerStyle)
 import Grain.UI.Util (hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
 import Web.DOM.Element (Element, removeAttribute, setAttribute)
@@ -17,14 +17,14 @@ import Web.DOM.Element (Element, removeAttribute, setAttribute)
 type AllocArgs =
   { isSvg :: Boolean
   , styler :: Styler
-  , nexts :: Object String
+  , nexts :: Array (Tuple String String)
   , element :: Element
   }
 
 allocProps :: AllocArgs -> Effect Unit
 allocProps args = do
   args' <- allocClassName args
-  forObjectE args'.nexts \name val ->
+  foreachE args'.nexts \(Tuple name val) ->
     setProp
       { isSvg: args'.isSvg
       , name
@@ -35,15 +35,15 @@ allocProps args = do
 type UpdateArgs =
   { isSvg :: Boolean
   , styler :: Styler
-  , currents :: Object String
-  , nexts :: Object String
+  , currents :: Array (Tuple String String)
+  , nexts :: Array (Tuple String String)
   , element :: Element
   }
 
 updateProps :: UpdateArgs -> Effect Unit
 updateProps args = do
   args' <- updateClassName args
-  let names = union (keys args'.currents) (keys args'.nexts)
+  let names = union (fst <$> args'.currents) (fst <$> args'.nexts)
   foreachE names $ updateByName args'
 
 updateByName :: UpdateArgs -> String -> Effect Unit
@@ -140,7 +140,7 @@ allocClassName args = do
         then setAttribute "class" n args.element
         else setAny "className" n args.element
   pure args
-    { nexts = delete "css" $ delete "className" args.nexts
+    { nexts = withoutCssAndClass args.nexts
     }
 
 updateClassName :: UpdateArgs -> Effect UpdateArgs
@@ -159,11 +159,11 @@ updateClassName args = do
         then setAttribute "class" n args.element
         else setAny "className" n args.element
   pure args
-    { currents = delete "css" $ delete "className" args.currents
-    , nexts = delete "css" $ delete "className" args.nexts
+    { currents = withoutCssAndClass args.currents
+    , nexts = withoutCssAndClass args.nexts
     }
 
-getClassName :: Styler -> Object String -> Effect (Maybe String)
+getClassName :: Styler -> Array (Tuple String String) -> Effect (Maybe String)
 getClassName styler props =
   case lookup "css" props, lookup "className" props of
     Nothing, Nothing ->
@@ -175,3 +175,10 @@ getClassName styler props =
     Just css, Just cls -> do
       cls' <- registerStyle css styler
       pure $ Just $ cls' <> " " <> cls
+
+isNot :: String -> Tuple String String -> Boolean
+isNot name (Tuple name' _) = name' /= name
+
+withoutCssAndClass :: Array (Tuple String String) -> Array (Tuple String String)
+withoutCssAndClass = filter \prop ->
+  isNot "css" prop && isNot "className" prop

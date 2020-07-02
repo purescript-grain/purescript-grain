@@ -26,13 +26,3 @@ exports.sequenceEImpl = function(fs) {
     i = (i + 1) | 0;
   }
 }
-
-exports.forObjectEImpl = function(obj, f) {
-  var k, i = 0, keys = Object.keys(obj);
-
-  while (i < keys.length) {
-    k = keys[i];
-    f(k)(obj[k])();
-    i = (i + 1) | 0;
-  }
-}

@@ -27,12 +27,12 @@ import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Data.Array (catMaybes, snoc, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain, which)
 import Grain.Effect (sequenceE)
 import Grain.MMap (MMap)
@@ -61,8 +61,8 @@ data VElement
   | VElement
       { fingerprint :: Maybe String
       , tagName :: String
-      , props :: Object String
-      , handlers :: Object (Event -> Effect Unit)
+      , props :: Array (Tuple String String)
+      , handlers :: Array (Tuple String (Event -> Effect Unit))
       , children :: Array VNode
       , didCreate :: Element -> Effect Unit
       , didUpdate :: Element -> Effect Unit
@@ -112,8 +112,8 @@ element :: String -> VNode
 element tagName = VNode Nothing $ VElement
   { fingerprint: Nothing
   , tagName
-  , props: empty
-  , handlers: empty
+  , props: []
+  , handlers: []
   , children: []
   , didCreate: const $ pure unit
   , didUpdate: const $ pure unit
@@ -133,7 +133,7 @@ kids _ velement = velement
 -- | Add a property.
 prop :: String -> String -> VNode -> VNode
 prop name val (VNode k (VElement r)) =
-  VNode k $ VElement r { props = insert name val r.props }
+  VNode k $ VElement r { props = snoc r.props (Tuple name val) }
 prop _ _ velement = velement
 
 -- | Bind an event handler.
@@ -143,7 +143,7 @@ handle
   -> VNode
   -> VNode
 handle name handler (VNode k (VElement r)) =
-  VNode k $ VElement r { handlers = insert name handler r.handlers }
+  VNode k $ VElement r { handlers = snoc r.handlers (Tuple name handler) }
 handle _ _ velement = velement
 
 -- | Bind `didCreate` lifecycle.

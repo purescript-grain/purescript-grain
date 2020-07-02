@@ -8,33 +8,33 @@ import Prelude
 import Data.Array (union)
 import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
+import Data.Tuple (Tuple(..), fst, lookup)
 import Effect (Effect)
-import Foreign.Object (Object, keys, lookup)
-import Grain.Effect (forObjectE, foreachE)
+import Grain.Effect (foreachE)
 import Grain.UI.Util (setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 import Web.Event.EventTarget (eventListener)
 
 type AllocArgs =
-  { nexts :: Object (Event -> Effect Unit)
+  { nexts :: Array (Tuple String (Event -> Effect Unit))
   , element :: Element
   }
 
 allocHandlers :: AllocArgs -> Effect Unit
 allocHandlers args =
-  forObjectE args.nexts \name handler ->
+  foreachE args.nexts \(Tuple name handler) ->
     setHandler { name, handler, element: args.element }
 
 type UpdateArgs =
-  { currents :: Object (Event -> Effect Unit)
-  , nexts :: Object (Event -> Effect Unit)
+  { currents :: Array (Tuple String (Event -> Effect Unit))
+  , nexts :: Array (Tuple String (Event -> Effect Unit))
   , element :: Element
   }
 
 updateHandlers :: UpdateArgs -> Effect Unit
 updateHandlers args =
-  let names = union (keys args.currents) (keys args.nexts)
+  let names = union (fst <$> args.currents) (fst <$> args.nexts)
       updateByName name =
         case lookup name args.currents, lookup name args.nexts of
           Nothing, Nothing ->

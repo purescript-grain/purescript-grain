@@ -5,8 +5,8 @@ module Grain.UI.Element
 
 import Prelude
 
+import Data.Tuple (Tuple)
 import Effect (Effect)
-import Foreign.Object (Object)
 import Grain.Styler (Styler)
 import Grain.UI.Handler (allocHandlers, updateHandlers)
 import Grain.UI.Prop (allocProps, updateProps)
@@ -16,8 +16,8 @@ import Web.Event.Event (Event)
 
 type VElementPart r =
   { tagName :: String
-  , props :: Object String
-  , handlers :: Object (Event -> Effect Unit)
+  , props :: Array (Tuple String String)
+  , handlers :: Array (Tuple String (Event -> Effect Unit))
   | r
   }
 
