@@ -35,8 +35,8 @@ import Effect.Ref as Ref
 import Foreign.Object (Object, delete, empty, insert, lookup)
 import Grain.Class (class Grain, which)
 import Grain.Effect (sequenceE)
-import Grain.JSMap (JSMap)
-import Grain.JSMap as JM
+import Grain.MMap (MMap)
+import Grain.MMap as MM
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler)
 import Grain.UI.Diff (class HasKey, PatchArgs(..), diff)
@@ -247,7 +247,7 @@ mount :: VNode -> Node -> Effect Unit
 mount vnode parentNode = do
   store <- createStore
   styler <- mountStyler
-  componentRefs <- JM.new
+  componentRefs <- MM.new
   nodeRefs <- newNodeRefs
   registerParentNode parentNode nodeRefs
   diff patch
@@ -272,7 +272,7 @@ type UIContext =
   , store :: Store
   , styler :: Styler
   , nodeRefs :: NodeRefs
-  , componentRefs :: JSMap Node ComponentRef
+  , componentRefs :: MMap Node ComponentRef
   }
 
 switchToSvg :: String -> UIContext -> UIContext
@@ -334,7 +334,7 @@ eval { context, target, current, next } =
         , render: nc.render
         , componentRef
         }
-      JM.set node componentRef context.componentRefs
+      MM.set node componentRef context.componentRefs
       pure node
     Nothing, Nothing, Just (VElement nv) -> do
       let ctx = switchToSvg nv.tagName context
@@ -358,13 +358,13 @@ eval { context, target, current, next } =
     Just node, Just (VText _), Nothing ->
       pure node
     Just node, Just (VComponent _), Nothing -> do
-      componentRef <- JM.unsafeGet node context.componentRefs
+      componentRef <- MM.unsafeGet node context.componentRefs
       unmountComponent
         { context
         , target: Just node
         , componentRef
         }
-      JM.del node context.componentRefs
+      MM.del node context.componentRefs
       pure node
     Just node, Just (VElement cv), Nothing -> do
       diff patch
@@ -384,7 +384,7 @@ eval { context, target, current, next } =
       pure node
     Just node, Just (VComponent cc), Just (VComponent nc) -> do
       when (isDifferent cc nc) do
-        componentRef <- JM.unsafeGet node context.componentRefs
+        componentRef <- MM.unsafeGet node context.componentRefs
         void $ evalComponent
           { context
           , target: Just node
@@ -599,32 +599,32 @@ addPortalHistory vnode componentRef =
 
 
 
-type NodeRefs = JSMap Node (Object Node)
+type NodeRefs = MMap Node (Object Node)
 
 newNodeRefs :: Effect NodeRefs
-newNodeRefs = JM.new
+newNodeRefs = MM.new
 
 registerParentNode :: Node -> NodeRefs -> Effect Unit
 registerParentNode parent nodeRefs =
-  JM.set parent empty nodeRefs
+  MM.set parent empty nodeRefs
 
 unregisterParentNode :: Node -> NodeRefs -> Effect Unit
 unregisterParentNode parent nodeRefs =
-  JM.del parent nodeRefs
+  MM.del parent nodeRefs
 
 registerChildNode :: Node -> String -> Node -> NodeRefs -> Effect Unit
 registerChildNode parent nodeKey child nodeRefs = do
-  o <- JM.unsafeGet parent nodeRefs
+  o <- MM.unsafeGet parent nodeRefs
   let o' = insert nodeKey child o
-  JM.set parent o' nodeRefs
+  MM.set parent o' nodeRefs
 
 unregisterChildNode :: Node -> String -> NodeRefs -> Effect Unit
 unregisterChildNode parent nodeKey nodeRefs = do
-  o <- JM.unsafeGet parent nodeRefs
+  o <- MM.unsafeGet parent nodeRefs
   let o' = delete nodeKey o
-  JM.set parent o' nodeRefs
+  MM.set parent o' nodeRefs
 
 getChildNode :: Node -> String -> NodeRefs -> Effect (Maybe Node)
 getChildNode parent nodeKey nodeRefs = do
-  o <- JM.unsafeGet parent nodeRefs
+  o <- MM.unsafeGet parent nodeRefs
   pure $ lookup nodeKey o

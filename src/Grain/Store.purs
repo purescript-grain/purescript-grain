@@ -17,12 +17,12 @@ import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Foreign.Object (Object, empty, insert, lookup)
 import Grain.Class (class Grain, initialState, keyOf, typeRefOf)
 import Grain.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
-import Grain.JSMap (JSMap)
-import Grain.JSMap as JM
+import Grain.MMap (MMap)
+import Grain.MMap as MM
 import Grain.TypeRef (TypeRef)
 import Unsafe.Coerce (unsafeCoerce)
 
-newtype Store = Store (JSMap TypeRef (Ref (Object Part)))
+newtype Store = Store (MMap TypeRef (Ref (Object Part)))
 
 type Part =
   { emitter :: Emitter
@@ -30,7 +30,7 @@ type Part =
   }
 
 createStore :: Effect Store
-createStore = Store <$> JM.new
+createStore = Store <$> MM.new
 
 readGrain
   :: forall p a
@@ -103,11 +103,11 @@ lookupPartsRef
   -> Store
   -> Effect (Ref (Object Part))
 lookupPartsRef proxy (Store m) = do
-  maybePartsRef <- JM.get (typeRefOf proxy) m
+  maybePartsRef <- MM.get (typeRefOf proxy) m
   case maybePartsRef of
     Just partsRef ->
       pure partsRef
     Nothing -> do
       partsRef <- Ref.new empty
-      JM.set (typeRefOf proxy) partsRef m
+      MM.set (typeRefOf proxy) partsRef m
       pure partsRef
