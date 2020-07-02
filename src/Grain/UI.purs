@@ -32,11 +32,13 @@ import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Foreign.Object (Object, delete, empty, insert, lookup)
+import Foreign.Object (Object, empty, insert)
 import Grain.Class (class Grain, which)
 import Grain.Effect (sequenceE)
 import Grain.MMap (MMap)
 import Grain.MMap as MM
+import Grain.MObject (MObject)
+import Grain.MObject as MO
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler)
 import Grain.UI.Diff (class HasKey, PatchArgs(..), diff)
@@ -599,14 +601,15 @@ addPortalHistory vnode componentRef =
 
 
 
-type NodeRefs = MMap Node (Object Node)
+type NodeRefs = MMap Node (MObject Node)
 
 newNodeRefs :: Effect NodeRefs
 newNodeRefs = MM.new
 
 registerParentNode :: Node -> NodeRefs -> Effect Unit
-registerParentNode parent nodeRefs =
-  MM.set parent empty nodeRefs
+registerParentNode parent nodeRefs = do
+  mo <- MO.new
+  MM.set parent mo nodeRefs
 
 unregisterParentNode :: Node -> NodeRefs -> Effect Unit
 unregisterParentNode parent nodeRefs =
@@ -614,17 +617,15 @@ unregisterParentNode parent nodeRefs =
 
 registerChildNode :: Node -> String -> Node -> NodeRefs -> Effect Unit
 registerChildNode parent nodeKey child nodeRefs = do
-  o <- MM.unsafeGet parent nodeRefs
-  let o' = insert nodeKey child o
-  MM.set parent o' nodeRefs
+  mo <- MM.unsafeGet parent nodeRefs
+  MO.set nodeKey child mo
 
 unregisterChildNode :: Node -> String -> NodeRefs -> Effect Unit
 unregisterChildNode parent nodeKey nodeRefs = do
-  o <- MM.unsafeGet parent nodeRefs
-  let o' = delete nodeKey o
-  MM.set parent o' nodeRefs
+  mo <- MM.unsafeGet parent nodeRefs
+  MO.del nodeKey mo
 
 getChildNode :: Node -> String -> NodeRefs -> Effect (Maybe Node)
 getChildNode parent nodeKey nodeRefs = do
-  o <- MM.unsafeGet parent nodeRefs
-  pure $ lookup nodeKey o
+  mo <- MM.unsafeGet parent nodeRefs
+  MO.get nodeKey mo

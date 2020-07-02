@@ -17,8 +17,8 @@ import Data.String.Regex (replace)
 import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
-import Effect.Ref (Ref, modify, new, read)
-import Foreign.Object (Object, empty, insert, member, values)
+import Grain.MObject (MObject)
+import Grain.MObject as MO
 import Partial.Unsafe (unsafePartial)
 import Web.DOM.Document (createElement)
 import Web.DOM.Element as E
@@ -30,24 +30,25 @@ import Web.HTML.Window (document)
 
 newtype Styler = Styler
   { node :: Node
-  , stylesRef :: Ref (Object String)
+  , stylesRef :: MObject String
   }
 
 mountStyler :: Effect Styler
 mountStyler = do
   node <- createStyleNode
-  stylesRef <- new empty
+  stylesRef <- MO.new
   pure $ Styler { node, stylesRef }
 
 registerStyle :: String -> Styler -> Effect String
 registerStyle style (Styler s) = do
   let minified = minify style
       name = "g" <> generateHash minified
-  styles <- read s.stylesRef
-  unless (member name styles) do
+  exists <- MO.has name s.stylesRef
+  unless exists do
     let output = replaceToken name minified
-    nextStyles <- joinWith "" <<< values <$> modify (insert name output) s.stylesRef
-    setTextContent nextStyles s.node
+    MO.set name output s.stylesRef
+    vs <- MO.values s.stylesRef
+    setTextContent (joinWith "" vs) s.node
   pure name
 
 replaceToken :: String -> String -> String

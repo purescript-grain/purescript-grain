@@ -14,15 +14,16 @@ import Effect (Effect)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
-import Foreign.Object (Object, empty, insert, lookup)
 import Grain.Class (class Grain, initialState, keyOf, typeRefOf)
 import Grain.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
 import Grain.MMap (MMap)
 import Grain.MMap as MM
+import Grain.MObject (MObject)
+import Grain.MObject as MO
 import Grain.TypeRef (TypeRef)
 import Unsafe.Coerce (unsafeCoerce)
 
-newtype Store = Store (MMap TypeRef (Ref (Object Part)))
+newtype Store = Store (MMap TypeRef (MObject Part))
 
 type Part =
   { emitter :: Emitter
@@ -85,15 +86,15 @@ lookupPart
   -> Effect Part
 lookupPart proxy store = do
   partsRef <- lookupPartsRef proxy store
-  parts <- Ref.read partsRef
-  case lookup (keyOf proxy) parts of
+  mPart <- MO.get (keyOf proxy) partsRef
+  case mPart of
     Just part -> pure part
     Nothing -> do
       value <- initialState proxy
       valueRef <- Ref.new $ unsafeToForeign value
       emitter <- createEmitter
       let part = { emitter, valueRef }
-      Ref.modify_ (insert (keyOf proxy) part) partsRef
+      MO.set (keyOf proxy) part partsRef
       pure part
 
 lookupPartsRef
@@ -101,13 +102,13 @@ lookupPartsRef
    . Grain p a
   => p a
   -> Store
-  -> Effect (Ref (Object Part))
+  -> Effect (MObject Part)
 lookupPartsRef proxy (Store m) = do
   maybePartsRef <- MM.get (typeRefOf proxy) m
   case maybePartsRef of
     Just partsRef ->
       pure partsRef
     Nothing -> do
-      partsRef <- Ref.new empty
+      partsRef <- MO.new
       MM.set (typeRefOf proxy) partsRef m
       pure partsRef

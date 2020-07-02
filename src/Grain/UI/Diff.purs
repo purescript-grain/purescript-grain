@@ -8,13 +8,13 @@ module Grain.UI.Diff
 import Prelude
 
 import Control.Monad.Rec.Class (Step(..), tailRecM)
-import Data.Array (length, unsafeIndex, (!!), (..))
+import Data.Array (length, unsafeIndex, (!!))
 import Data.Maybe (Maybe(..), fromJust)
-import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Foreign.Object (Object, delete, empty, fromFoldable, keys, lookup, size)
-import Foreign.Object.Unsafe as OU
+import Effect.Unsafe (unsafePerformEffect)
 import Grain.Effect (forE, foreachE)
+import Grain.MObject (MObject)
+import Grain.MObject as MO
 import Partial.Unsafe (unsafePartial)
 
 class HasKey c where
@@ -109,7 +109,7 @@ diff patch args@{ context, parentNode, currents, nexts } = do
             , endN: lengthN - 1
             }
         }
-      let ktoi = keyToIdx args1
+      ktoi <- keyToIdx args1
       tailRecM diff2
         { patch
         , args
@@ -227,7 +227,7 @@ diff1 args1@{ patch, args, st }
 type Diff2State =
   { startN :: Int
   , endN :: Int
-  , ktoi :: Object Int
+  , ktoi :: MObject Int
   }
 
 type Diff2Args ctx p c =
@@ -245,7 +245,8 @@ diff2 args2@{ patch, args, st }
   | st.startN <= st.endN = do
       let vnodeN = index_ args.nexts st.startN
           keyN = getKey st.startN vnodeN
-      case lookup keyN st.ktoi of
+      mIdxC <- MO.get keyN st.ktoi
+      case mIdxC of
         Nothing -> do
           patch $ Create
             { context: args.context
@@ -269,16 +270,15 @@ diff2 args2@{ patch, args, st }
             , current: vnodeC
             , next: vnodeN
             }
+          MO.del keyN st.ktoi
           pure $ Loop args2
-            { st = st
-                { startN = st.startN + 1
-                , ktoi = delete keyN st.ktoi
-                }
+            { st = st { startN = st.startN + 1 }
             }
-  | size st.ktoi > 0 = do
-      foreachE (keys st.ktoi) \keyC -> do
-        let idxC = OU.unsafeIndex st.ktoi keyC
-            vnodeC = index_ args.currents idxC
+  | unsafePerformEffect (MO.size st.ktoi) > 0 = do
+      ks <- MO.keys st.ktoi
+      foreachE ks \keyC -> do
+        idxC <- MO.unsafeGet keyC st.ktoi
+        let vnodeC = index_ args.currents idxC
         patch $ Delete
           { context: args.context
           , parentNode: args.parentNode
@@ -293,12 +293,14 @@ keyToIdx
   :: forall ctx p c
    . HasKey c
   => Diff1Args ctx p c
-  -> Object Int
+  -> Effect (MObject Int)
 keyToIdx { args: { currents }, st: { startC, endC } }
-  | startC > endC = empty
-  | otherwise =
-      fromFoldable $ (startC .. endC) <#> \idx ->
-        Tuple (getKey idx $ index_ currents idx) idx
+  | startC > endC = MO.new
+  | otherwise = do
+      ktoi <- MO.new
+      forE startC (endC + 1) \idx ->
+        MO.set (getKey idx $ index_ currents idx) idx ktoi
+      pure ktoi
 
 eqKey :: Maybe String -> Maybe String -> Boolean
 eqKey (Just c) (Just n) = c == n
