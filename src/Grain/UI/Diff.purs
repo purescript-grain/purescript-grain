@@ -1,233 +1,311 @@
 module Grain.UI.Diff
   ( class HasKey
   , getKey
+  , PatchArgs(..)
   , diff
   ) where
 
 import Prelude
 
 import Control.Monad.Rec.Class (Step(..), tailRecM)
-import Data.Array (length, snoc, unsafeIndex, (!!), (..))
-import Data.Foldable (foldl)
+import Data.Array (length, unsafeIndex, (!!), (..))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Foreign.Object as O
-import Grain.Effect (forE)
+import Foreign.Object (Object, delete, empty, fromFoldable, keys, lookup, size)
+import Foreign.Object.Unsafe as OU
+import Grain.Effect (forE, foreachE)
 import Partial.Unsafe (unsafePartial)
 
-class HasKey a where
-  getKey :: Int -> a -> String
+class HasKey c where
+  getKey :: Int -> c -> String
 
 instance hasKeyInt :: HasKey Int where
   getKey _ = show
 
-type PatchArgs ctx parent child =
+data PatchArgs ctx p c
+  = Create
+      { context :: ctx
+      , parentNode :: p
+      , nodeKey :: String
+      , index :: Int
+      , next :: c
+      }
+  | Delete
+      { context :: ctx
+      , parentNode :: p
+      , nodeKey :: String
+      , current :: c
+      }
+  | Update
+      { context :: ctx
+      , parentNode :: p
+      , nodeKey :: String
+      , current :: c
+      , next :: c
+      }
+  | Move
+      { context :: ctx
+      , parentNode :: p
+      , nodeKey :: String
+      , index :: Int
+      , current :: c
+      , next :: c
+      }
+
+type Patch ctx p c =
+  PatchArgs ctx p c -> Effect Unit
+
+type DiffArgs ctx p c =
   { context :: ctx
-  , current :: Maybe child
-  , next :: Maybe child
-  , parentNode :: parent
-  , nodeIndex :: Int
-  , moveIndex :: Maybe Int
-  }
-
-type Patcher ctx parent child =
-  PatchArgs ctx parent child -> Effect Unit
-
-data RealOperation = Add | Delete
-
-type DiffState a =
-  { currents :: Array a
-  , nexts :: Array a
-  , currentStart :: Int
-  , currentEnd :: Int
-  , nextStart :: Int
-  , nextEnd :: Int
-  , realOperations :: Array (Tuple Int RealOperation)
-  , keyToIndex :: O.Object Int
-  }
-
-initState
-  :: forall a
-   . HasKey a
-  => Array a
-  -> Array a
-  -> DiffState a
-initState currents nexts =
-  { currents
-  , nexts
-  , currentStart: 0
-  , currentEnd: length currents - 1
-  , nextStart: 0
-  , nextEnd: length nexts - 1
-  , realOperations: []
-  , keyToIndex: O.empty
-  }
-
-cursorCurrentStart :: forall a. DiffState a -> Maybe a
-cursorCurrentStart { currents, currentStart } = currents !! currentStart
-
-cursorCurrentEnd :: forall a. DiffState a -> Maybe a
-cursorCurrentEnd { currents, currentEnd } = currents !! currentEnd
-
-cursorNextStart :: forall a. DiffState a -> Maybe a
-cursorNextStart { nexts, nextStart } = nexts !! nextStart
-
-cursorNextEnd :: forall a. DiffState a -> Maybe a
-cursorNextEnd { nexts, nextEnd } = nexts !! nextEnd
-
-forwardCurrentCursor :: forall a. DiffState a -> DiffState a
-forwardCurrentCursor x = x { currentStart = x.currentStart + 1 }
-
-forwardNextCursor :: forall a. DiffState a -> DiffState a
-forwardNextCursor x = x { nextStart = x.nextStart + 1 }
-
-backwardCurrentCursor :: forall a. DiffState a -> DiffState a
-backwardCurrentCursor x = x { currentEnd = x.currentEnd - 1 }
-
-backwardNextCursor :: forall a. DiffState a -> DiffState a
-backwardNextCursor x = x { nextEnd = x.nextEnd - 1 }
-
-markRealAdding :: forall a. Int -> DiffState a -> DiffState a
-markRealAdding realIndex x = x { realOperations = snoc x.realOperations $ Tuple realIndex Add }
-
-markRealDeleting :: forall a. Int -> DiffState a -> DiffState a
-markRealDeleting realIndex x = x { realOperations = snoc x.realOperations $ Tuple realIndex Delete }
-
-markRealMove :: forall a. Int -> Int -> DiffState a -> DiffState a
-markRealMove from to =
-  markRealDeleting from >>> markRealAdding to
-
-realSourceIdx :: forall a. Int -> DiffState a -> Int
-realSourceIdx currentVirtualIdx x =
-  foldl calc currentVirtualIdx x.realOperations
-  where
-    calc sourceIdx (Tuple idx Add) = if sourceIdx < idx then sourceIdx else sourceIdx + 1
-    calc sourceIdx (Tuple idx Delete) = if sourceIdx < idx then sourceIdx else sourceIdx - 1
-
-storeKeyToIdx :: forall a. HasKey a => DiffState a -> DiffState a
-storeKeyToIdx x = x { keyToIndex = _ }
-  if x.currentStart > x.currentEnd
-    then O.empty
-    else O.fromFoldable
-      $ flip map (x.currentStart .. x.currentEnd)
-      $ \i -> Tuple (getKey i $ unsafePartial $ unsafeIndex x.currents i) i
-
-markProcessKey :: forall a. String -> DiffState a -> DiffState a
-markProcessKey k x = x { keyToIndex = _ } $ O.delete k x.keyToIndex
-
-type DiffArgs ctx parent child =
-  { context :: ctx
-  , parent :: parent
-  , currentChildren :: Array child
-  , nextChildren :: Array child
+  , parentNode :: p
+  , currents :: Array c
+  , nexts :: Array c
   }
 
 diff
-  :: forall ctx parent child
-   . HasKey child
-  => Patcher ctx parent child
-  -> DiffArgs ctx parent child
+  :: forall ctx p c
+   . HasKey c
+  => Patch ctx p c
+  -> DiffArgs ctx p c
   -> Effect Unit
-diff patch { context, parent, currentChildren, nextChildren } =
-  case length currentChildren, length nextChildren of
+diff patch args@{ context, parentNode, currents, nexts } = do
+  let lengthC = length currents
+      lengthN = length nexts
+  case lengthC, lengthN of
     0, 0 ->
       pure unit
-    0, nextLength ->
-      forE 0 nextLength \i ->
-        patch
+    0, l ->
+      forE 0 l \i -> do
+        let next = index_ nexts i
+            nodeKey = getKey i next
+        patch $ Create
           { context
-          , parentNode: parent
-          , nodeIndex: i
-          , moveIndex: Nothing
-          , current: Nothing
-          , next: nextChildren !! i
+          , parentNode
+          , nodeKey
+          , index: i
+          , next
           }
-    currentLength, 0 ->
-      forE 0 currentLength \i ->
-        patch
+    l, 0 ->
+      forE 0 l \i -> do
+        let current = index_ currents i
+            nodeKey = getKey i current
+        patch $ Delete
           { context
-          , parentNode: parent
-          , nodeIndex: 0
-          , moveIndex: Nothing
-          , current: currentChildren !! i
-          , next: Nothing
+          , parentNode
+          , nodeKey
+          , current
           }
     _, _ -> do
-      state <- storeKeyToIdx <$> tailRecM takeDiffPerformant initialState
-      tailRecM takeDiff state
-      where
-        initialState = initState currentChildren nextChildren
+      args1 <- tailRecM diff1
+        { patch
+        , args
+        , st:
+            { lengthC
+            , startC: 0
+            , endC: lengthC - 1
+            , lengthN
+            , startN: 0
+            , endN: lengthN - 1
+            }
+        }
+      let ktoi = keyToIdx args1
+      tailRecM diff2
+        { patch
+        , args
+        , st:
+            { startN: args1.st.startN
+            , endN: args1.st.endN
+            , ktoi
+            }
+        }
 
-        equalKey (Just c) (Just n) = c == n
-        equalKey _ _ = false
+type Diff1State =
+  { lengthC :: Int
+  , startC :: Int
+  , endC :: Int
+  , lengthN :: Int
+  , startN :: Int
+  , endN :: Int
+  }
 
-        takeDiffPerformant s
-          | s.currentStart > s.currentEnd || s.nextStart > s.nextEnd = pure $ Done s
-          | equalKey (getKey s.currentStart <$> cursorCurrentStart s) (getKey s.nextStart <$> cursorNextStart s) = do
-              patch
-                { context
-                , current: cursorCurrentStart s
-                , next: cursorNextStart s
-                , parentNode: parent
-                , nodeIndex: s.currentStart
-                , moveIndex: Nothing
-                }
-              pure $ Loop $ forwardCurrentCursor >>> forwardNextCursor $ s
-          | equalKey (getKey s.currentEnd <$> cursorCurrentEnd s) (getKey s.nextEnd <$> cursorNextEnd s) = do
-              patch
-                { context
-                , current: cursorCurrentEnd s
-                , next: cursorNextEnd s
-                , parentNode: parent
-                , nodeIndex: s.currentEnd
-                , moveIndex: Nothing
-                }
-              pure $ Loop $ backwardCurrentCursor >>> backwardNextCursor $ s
-          | otherwise = pure $ Done s
+type Diff1Args ctx p c =
+  { patch :: Patch ctx p c
+  , args :: DiffArgs ctx p c
+  , st :: Diff1State
+  }
 
-        takeDiff s
-          | s.nextStart <= s.nextEnd =
-              let cursorNext = unsafePartial $ unsafeIndex s.nexts s.nextStart
-                  nextKey = getKey s.nextStart cursorNext
-               in case O.lookup nextKey s.keyToIndex of
-                    Nothing -> do
-                      patch
-                        { context
-                        , current: Nothing
-                        , next: Just cursorNext
-                        , parentNode: parent
-                        , nodeIndex: s.nextStart
-                        , moveIndex: Nothing
-                        }
-                      pure $ Loop $ markRealAdding s.nextStart
-                        >>> forwardNextCursor $ s
-                    Just currentIdx -> do
-                      let sourceIdx = realSourceIdx currentIdx s
-                          targetIdx = s.nextStart
-                      patch
-                        { context
-                        , current: s.currents !! currentIdx
-                        , next: Just cursorNext
-                        , parentNode: parent
-                        , nodeIndex: sourceIdx
-                        , moveIndex: Just targetIdx
-                        }
-                      pure $ Loop $ markRealMove sourceIdx targetIdx
-                        >>> markProcessKey nextKey
-                        >>> forwardNextCursor $ s
-          | O.size s.keyToIndex > 0 = do
-              let currentKey = unsafePartial $ unsafeIndex (O.keys s.keyToIndex) 0
-                  currentIdx = unsafePartial $ fromJust $ O.lookup currentKey s.keyToIndex
-                  sourceIdx = realSourceIdx currentIdx s
-              patch
-                { context
-                , current: s.currents !! currentIdx
-                , next: Nothing
-                , parentNode: parent
-                , nodeIndex: sourceIdx
-                , moveIndex: Nothing
+diff1
+  :: forall ctx p c
+   . HasKey c
+  => Diff1Args ctx p c
+  -> Effect (Step (Diff1Args ctx p c) (Diff1Args ctx p c))
+diff1 args1@{ patch, args, st }
+  | st.startC > st.endC =
+      pure $ Done args1
+  | st.startN > st.endN =
+      pure $ Done args1
+  | otherwise = do
+      let vnodeStartC = args.currents !! st.startC
+          vnodeEndC = args.currents !! st.endC
+          vnodeStartN = args.nexts !! st.startN
+          vnodeEndN = args.nexts !! st.endN
+
+          keyStartC = getKey st.startC <$> vnodeStartC
+          keyEndC = getKey st.endC <$> vnodeEndC
+          keyStartN = getKey st.startN <$> vnodeStartN
+          keyEndN = getKey st.endN <$> vnodeEndN
+
+          eqStart = eqKey keyStartC keyStartN
+          eqEnd = eqKey keyEndC keyEndN
+          eqStartEnd = eqKey keyStartC keyEndN
+          eqEndStart = eqKey keyEndC keyStartN
+
+      if eqStart then do
+        patch $ Update
+          { context: args.context
+          , parentNode: args.parentNode
+          , nodeKey: just keyStartN
+          , current: just vnodeStartC
+          , next: just vnodeStartN
+          }
+        pure $ Loop args1
+          { st = st
+              { startC = st.startC + 1
+              , startN = st.startN + 1
+              }
+          }
+      else if eqEnd then do
+        patch $ Update
+          { context: args.context
+          , parentNode: args.parentNode
+          , nodeKey: just keyEndN
+          , current: just vnodeEndC
+          , next: just vnodeEndN
+          }
+        pure $ Loop args1
+          { st = st
+              { endC = st.endC - 1
+              , endN = st.endN - 1
+              }
+          }
+      else if eqStartEnd then do
+        let delta = st.lengthN - 1 - st.endN
+            index = st.lengthC - 1 - delta
+        patch $ Move
+          { context: args.context
+          , parentNode: args.parentNode
+          , nodeKey: just keyEndN
+          , index
+          , current: just vnodeStartC
+          , next: just vnodeEndN
+          }
+        pure $ Loop args1
+          { st = st
+              { startC = st.startC + 1
+              , endN = st.endN - 1
+              }
+          }
+      else if eqEndStart then do
+        patch $ Move
+          { context: args.context
+          , parentNode: args.parentNode
+          , nodeKey: just keyStartN
+          , index: st.startN
+          , current: just vnodeEndC
+          , next: just vnodeStartN
+          }
+        pure $ Loop args1
+          { st = st
+              { endC = st.endC - 1
+              , startN = st.startN + 1
+              }
+          }
+      else
+        pure $ Done args1
+
+type Diff2State =
+  { startN :: Int
+  , endN :: Int
+  , ktoi :: Object Int
+  }
+
+type Diff2Args ctx p c =
+  { patch :: Patch ctx p c
+  , args :: DiffArgs ctx p c
+  , st :: Diff2State
+  }
+
+diff2
+  :: forall ctx p c
+   . HasKey c
+  => Diff2Args ctx p c
+  -> Effect (Step (Diff2Args ctx p c) Unit)
+diff2 args2@{ patch, args, st }
+  | st.startN <= st.endN = do
+      let vnodeN = index_ args.nexts st.startN
+          keyN = getKey st.startN vnodeN
+      case lookup keyN st.ktoi of
+        Nothing -> do
+          patch $ Create
+            { context: args.context
+            , parentNode: args.parentNode
+            , nodeKey: keyN
+            , index: st.startN
+            , next: vnodeN
+            }
+          pure $ Loop args2
+            { st = st
+                { startN = st.startN + 1
                 }
-              pure $ Loop $ markRealDeleting sourceIdx
-                >>> markProcessKey currentKey $ s
-          | otherwise = pure $ Done unit
+            }
+        Just idxC -> do
+          let vnodeC = index_ args.currents idxC
+          patch $ Move
+            { context: args.context
+            , parentNode: args.parentNode
+            , nodeKey: keyN
+            , index: st.startN
+            , current: vnodeC
+            , next: vnodeN
+            }
+          pure $ Loop args2
+            { st = st
+                { startN = st.startN + 1
+                , ktoi = delete keyN st.ktoi
+                }
+            }
+  | size st.ktoi > 0 = do
+      foreachE (keys st.ktoi) \keyC -> do
+        let idxC = OU.unsafeIndex st.ktoi keyC
+            vnodeC = index_ args.currents idxC
+        patch $ Delete
+          { context: args.context
+          , parentNode: args.parentNode
+          , nodeKey: keyC
+          , current: vnodeC
+          }
+      pure $ Done unit
+  | otherwise =
+      pure $ Done unit
+
+keyToIdx
+  :: forall ctx p c
+   . HasKey c
+  => Diff1Args ctx p c
+  -> Object Int
+keyToIdx { args: { currents }, st: { startC, endC } }
+  | startC > endC = empty
+  | otherwise =
+      fromFoldable $ (startC .. endC) <#> \idx ->
+        Tuple (getKey idx $ index_ currents idx) idx
+
+eqKey :: Maybe String -> Maybe String -> Boolean
+eqKey (Just c) (Just n) = c == n
+eqKey _ _ = false
+
+just :: forall a. Maybe a -> a
+just x = unsafePartial $ fromJust x
+
+index_ :: forall c. Array c -> Int -> c
+index_ xs i = unsafePartial $ unsafeIndex xs i

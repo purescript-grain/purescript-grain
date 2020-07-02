@@ -1,6 +1,6 @@
 module Grain.UI.Util
   ( raf
-  , childNode
+  , nodeIndexOf
   , putNode
   , createText_
   , createElement_
@@ -21,7 +21,7 @@ import Data.String.Regex (Regex, replace, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
-import Effect.Uncurried (EffectFn3, EffectFn4, runEffectFn3, runEffectFn4)
+import Effect.Uncurried (EffectFn1, EffectFn3, EffectFn4, runEffectFn1, runEffectFn3, runEffectFn4)
 import Web.DOM.Document (Document, createElement, createElementNS, createTextNode)
 import Web.DOM.Element (Element)
 import Web.DOM.Node (Node, appendChild, childNodes, insertBefore)
@@ -33,6 +33,9 @@ import Web.HTML.Window (document, requestAnimationFrame)
 
 raf :: Effect Unit -> Effect Unit
 raf f = void $ window >>= requestAnimationFrame f
+
+nodeIndexOf :: Node -> Effect Int
+nodeIndexOf node = runEffectFn1 nodeIndexOfImpl node
 
 childNode :: Int -> Node -> Effect (Maybe Node)
 childNode i node = childNodes node >>= item i
@@ -98,6 +101,7 @@ isBoolean :: String -> Element -> Boolean
 isBoolean name element =
   runFn2 isBooleanImpl name element
 
+foreign import nodeIndexOfImpl :: EffectFn1 Node Int
 foreign import setAnyImpl :: forall a. EffectFn3 String a Element Unit
 foreign import setAttributeNSImpl :: EffectFn4 String String String Element Unit
 foreign import removeAttributeNSImpl :: EffectFn3 String String Element Unit

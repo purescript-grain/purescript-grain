@@ -1,5 +1,9 @@
 'use strict';
 
+exports.nodeIndexOfImpl = function(node) {
+  return Array.prototype.indexOf.call(node.parentNode.children, node);
+}
+
 exports.setAnyImpl = function(name, any, element) {
   element[name] = any;
 }

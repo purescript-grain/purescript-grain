@@ -25,23 +25,23 @@ import Prelude
 
 import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
-import Data.Array (length, snoc, take, (!!), (:))
+import Data.Array (catMaybes, snoc, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Foreign.Object (Object, empty, insert)
+import Foreign.Object (Object, delete, empty, insert, lookup)
 import Grain.Class (class Grain, which)
-import Grain.Effect (forE, sequenceE)
+import Grain.Effect (sequenceE)
 import Grain.JSMap (JSMap)
 import Grain.JSMap as JM
 import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Styler (Styler, mountStyler)
-import Grain.UI.Diff (class HasKey, diff)
+import Grain.UI.Diff (class HasKey, PatchArgs(..), diff)
 import Grain.UI.Element (allocElement, updateElement)
-import Grain.UI.Util (childNode, createText_, putNode, raf)
+import Grain.UI.Util (createText_, nodeIndexOf, putNode, raf)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Element as E
@@ -248,19 +248,20 @@ mount vnode parentNode = do
   store <- createStore
   styler <- mountStyler
   componentRefs <- JM.new
-  patch
+  nodeRefs <- newNodeRefs
+  registerParentNode parentNode nodeRefs
+  diff patch
     { context:
         { isSvg: false
         , deleting: false
         , store
         , styler
+        , nodeRefs
         , componentRefs
         }
     , parentNode
-    , nodeIndex: 0
-    , moveIndex: Nothing
-    , current: Nothing
-    , next: Just vnode
+    , currents: []
+    , nexts: [ vnode ]
     }
 
 
@@ -270,6 +271,7 @@ type UIContext =
   , deleting :: Boolean
   , store :: Store
   , styler :: Styler
+  , nodeRefs :: NodeRefs
   , componentRefs :: JSMap Node ComponentRef
   }
 
@@ -287,37 +289,27 @@ switchToDeleting context =
 
 
 
-type PatchArgs =
-  { context :: UIContext
-  , parentNode :: Node
-  , nodeIndex :: Int
-  , moveIndex :: Maybe Int
-  , current :: Maybe VNode
-  , next :: Maybe VNode
-  }
-
-patch :: PatchArgs -> Effect Unit
-patch { context, parentNode, nodeIndex, moveIndex, current, next } =
-  case current, next of
-    Nothing, Just (VNode _ next') -> do
-      node <- eval { context, target: Nothing, current: Nothing, next: Just next' }
-      void $ putNode nodeIndex node parentNode
-    Just (VNode _ current'), Nothing -> do
-      let ctx = switchToDeleting context
-      target <- childNode nodeIndex parentNode
-      node <- eval { context: ctx, target, current: Just current', next: Nothing }
-      when (not context.deleting) do
-        void $ removeChild node parentNode
-    Just (VNode _ current'), Just (VNode _ next') -> do
-      target <- childNode nodeIndex parentNode
-      node <- eval { context, target, current: Just current', next: Just next' }
-      case moveIndex of
-        Nothing -> pure unit
-        Just mi -> do
-          let adjustedIdx = if nodeIndex < mi then mi + 1 else mi
-          void $ putNode adjustedIdx node parentNode
-    _, _ ->
-      pure unit
+patch :: PatchArgs UIContext Node VNode -> Effect Unit
+patch (Create { context, parentNode, nodeKey, index, next: VNode _ next' }) = do
+  node <- eval { context, target: Nothing, current: Nothing, next: Just next' }
+  registerChildNode parentNode nodeKey node context.nodeRefs
+  void $ putNode index node parentNode
+patch (Delete { context, parentNode, nodeKey, current: VNode _ current' }) = do
+  let ctx = switchToDeleting context
+  target <- getChildNode parentNode nodeKey ctx.nodeRefs
+  node <- eval { context: ctx, target, current: Just current', next: Nothing }
+  when (not context.deleting) do
+    unregisterChildNode parentNode nodeKey ctx.nodeRefs
+    void $ removeChild node parentNode
+patch (Update { context, parentNode, nodeKey, current: VNode _ current', next: VNode _ next' }) = do
+  target <- getChildNode parentNode nodeKey context.nodeRefs
+  void $ eval { context, target, current: Just current', next: Just next' }
+patch (Move { context, parentNode, nodeKey, index, current: VNode _ current', next: VNode _ next' }) = do
+  target <- getChildNode parentNode nodeKey context.nodeRefs
+  node <- eval { context, target, current: Just current', next: Just next' }
+  ni <- nodeIndexOf node
+  let adjustedIdx = if ni < index then index + 1 else index
+  void $ putNode adjustedIdx node parentNode
 
 
 
@@ -352,15 +344,13 @@ eval { context, target, current, next } =
         , next: nv
         }
       let node = E.toNode el
-      forE 0 (length nv.children) \i ->
-        patch
-          { context: ctx
-          , parentNode: node
-          , nodeIndex: i
-          , moveIndex: Nothing
-          , current: Nothing
-          , next: nv.children !! i
-          }
+      registerParentNode node ctx.nodeRefs
+      diff patch
+        { context: ctx
+        , parentNode: node
+        , currents: []
+        , nexts: nv.children
+        }
       nv.didCreate el
       pure node
 
@@ -377,16 +367,14 @@ eval { context, target, current, next } =
       JM.del node context.componentRefs
       pure node
     Just node, Just (VElement cv), Nothing -> do
-      forE 0 (length cv.children) \i ->
-        patch
-          { context
-          , parentNode: node
-          , nodeIndex: i
-          , moveIndex: Nothing
-          , current: cv.children !! i
-          , next: Nothing
-          }
+      diff patch
+        { context
+        , parentNode: node
+        , currents: cv.children
+        , nexts: []
+        }
       cv.didDelete $ unsafeCoerce node
+      unregisterParentNode node context.nodeRefs
       pure node
 
     -- Update
@@ -417,9 +405,9 @@ eval { context, target, current, next } =
           }
         diff patch
           { context: ctx
-          , parent: node
-          , currentChildren: cv.children
-          , nextChildren: nv.children
+          , parentNode: node
+          , currents: cv.children
+          , nexts: nv.children
           }
         nv.didUpdate el
       pure node
@@ -564,33 +552,41 @@ triggerUnsubscriber componentRef = do
 getPortal :: UIContext -> ComponentRef -> Effect Node -> VNode -> VNode
 getPortal context componentRef getPortalRoot vnode =
   element "span"
-    # didCreate (const patchPortal)
-    # didUpdate (const patchPortal)
+    # didCreate (const createPortal)
+    # didUpdate (const updatePortal)
     # didDelete (const deletePortal)
   where
-    patchPortal = do
+    createPortal = do
       parentNode <- getPortalRoot
       h <- addPortalHistory vnode componentRef
-      patch
+      registerParentNode parentNode context.nodeRefs
+      diff patch
         { context
         , parentNode
-        , nodeIndex: 0
-        , moveIndex: Nothing
-        , current: h !! 1
-        , next: h !! 0
+        , currents: []
+        , nexts: [ vnode ]
+        }
+
+    updatePortal = do
+      parentNode <- getPortalRoot
+      h <- addPortalHistory vnode componentRef
+      diff patch
+        { context
+        , parentNode
+        , currents: catMaybes [ h !! 1 ]
+        , nexts: catMaybes [ h !! 0 ]
         }
 
     deletePortal = do
       parentNode <- getPortalRoot
       h <- componentPortalHistory componentRef
-      patch
+      diff patch
         { context
         , parentNode
-        , nodeIndex: 0
-        , moveIndex: Nothing
-        , current: h !! 0
-        , next: Nothing
+        , currents: catMaybes [ h !! 0 ]
+        , nexts: []
         }
+      unregisterParentNode parentNode context.nodeRefs
 
 componentPortalHistory :: ComponentRef -> Effect (Array VNode)
 componentPortalHistory componentRef =
@@ -600,3 +596,35 @@ addPortalHistory :: VNode -> ComponentRef -> Effect (Array VNode)
 addPortalHistory vnode componentRef =
   _.portalHistory <$> flip Ref.modify componentRef \r ->
     r { portalHistory = take 2 $ vnode : r.portalHistory }
+
+
+
+type NodeRefs = JSMap Node (Object Node)
+
+newNodeRefs :: Effect NodeRefs
+newNodeRefs = JM.new
+
+registerParentNode :: Node -> NodeRefs -> Effect Unit
+registerParentNode parent nodeRefs =
+  JM.set parent empty nodeRefs
+
+unregisterParentNode :: Node -> NodeRefs -> Effect Unit
+unregisterParentNode parent nodeRefs =
+  JM.del parent nodeRefs
+
+registerChildNode :: Node -> String -> Node -> NodeRefs -> Effect Unit
+registerChildNode parent nodeKey child nodeRefs = do
+  o <- JM.unsafeGet parent nodeRefs
+  let o' = insert nodeKey child o
+  JM.set parent o' nodeRefs
+
+unregisterChildNode :: Node -> String -> NodeRefs -> Effect Unit
+unregisterChildNode parent nodeKey nodeRefs = do
+  o <- JM.unsafeGet parent nodeRefs
+  let o' = delete nodeKey o
+  JM.set parent o' nodeRefs
+
+getChildNode :: Node -> String -> NodeRefs -> Effect (Maybe Node)
+getChildNode parent nodeKey nodeRefs = do
+  o <- JM.unsafeGet parent nodeRefs
+  pure $ lookup nodeKey o

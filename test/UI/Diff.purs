@@ -3,13 +3,13 @@ module Test.UI.Diff where
 import Prelude
 
 import Control.Safely as Safe
-import Data.Array (deleteAt, insertAt, (!!))
+import Data.Array (delete, insertAt)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Class (liftEffect)
-import Effect.Ref (Ref, new, read, write)
+import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Grain.Markup as H
-import Grain.UI.Diff (diff, getKey)
+import Grain.UI.Diff (PatchArgs(..), diff, getKey)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 
@@ -26,9 +26,9 @@ testDiff = suite "Diff" do
         ref <- liftEffect $ new startingList
         liftEffect $ diff patch
           { context: unit
-          , parent: ref
-          , currentChildren: startingList
-          , nextChildren: targetList
+          , parentNode: ref
+          , currents: startingList
+          , nexts: targetList
           }
         sourceList <- liftEffect $ read ref
         Assert.equal targetList sourceList
@@ -36,9 +36,9 @@ testDiff = suite "Diff" do
       ref <- liftEffect $ new []
       liftEffect $ diff patch
         { context: unit
-        , parent: ref
-        , currentChildren: []
-        , nextChildren: startingList
+        , parentNode: ref
+        , currents: []
+        , nexts: startingList
         }
       sourceList <- liftEffect $ read ref
       Assert.equal startingList sourceList
@@ -131,38 +131,17 @@ targetLists =
   , [ 100, 101, 102, 0, 1, 2, 3000, 500, 34, 23 ]
   ]
 
-type PatchArgs =
-  { context :: Unit
-  , current :: Maybe Int
-  , next :: Maybe Int
-  , parentNode :: Ref (Array Int)
-  , nodeIndex :: Int
-  , moveIndex :: Maybe Int
-  }
-
-patch :: PatchArgs -> Effect Unit
-patch x = do
-  list <- read x.parentNode
-  case x.current, x.next of
-    Nothing, Nothing -> pure unit
-    Nothing, Just num ->
-      case insertAt x.nodeIndex num list of
-        Nothing -> pure unit
-        Just list' -> write list' x.parentNode
-    Just _, Nothing ->
-      case deleteAt x.nodeIndex list of
-        Nothing -> pure unit
-        Just list' -> write list' x.parentNode
-    Just _, Just _ ->
-      case x.moveIndex of
-        Nothing -> pure unit
-        Just i ->
-          case list !! x.nodeIndex of
-            Nothing -> pure unit
-            Just item ->
-              case deleteAt x.nodeIndex list of
-                Nothing -> pure unit
-                Just list' ->
-                  case insertAt i item list' of
-                    Nothing -> pure unit
-                    Just list_ -> write list_ x.parentNode
+patch :: PatchArgs Unit (Ref (Array Int)) Int -> Effect Unit
+patch (Create { parentNode, index, next }) = do
+  list <- read parentNode
+  case insertAt index next list of
+    Nothing -> pure unit
+    Just list' -> write list' parentNode
+patch (Delete { parentNode, current }) = do
+  modify_ (delete current) parentNode
+patch (Move { parentNode, index, current, next }) = do
+  list <- modify (delete current) parentNode
+  case insertAt index next list of
+    Nothing -> pure unit
+    Just list' -> write list' parentNode
+patch _ = pure unit
