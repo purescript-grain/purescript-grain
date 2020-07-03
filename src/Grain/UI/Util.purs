@@ -11,17 +11,21 @@ module Grain.UI.Util
   , setAny
   , isProperty
   , isBoolean
+  , just
+  , index_
   ) where
 
 import Prelude
 
+import Data.Array (unsafeIndex)
 import Data.Function.Uncurried (Fn2, runFn2)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromJust)
 import Data.String.Regex (Regex, replace, test)
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn1, EffectFn3, EffectFn4, runEffectFn1, runEffectFn3, runEffectFn4)
+import Partial.Unsafe (unsafePartial)
 import Web.DOM.Document (Document, createElement, createElementNS, createTextNode)
 import Web.DOM.Element (Element)
 import Web.DOM.Node (Node, appendChild, childNodes, insertBefore)
@@ -100,6 +104,12 @@ isProperty name element =
 isBoolean :: String -> Element -> Boolean
 isBoolean name element =
   runFn2 isBooleanImpl name element
+
+just :: forall a. Maybe a -> a
+just x = unsafePartial $ fromJust x
+
+index_ :: forall a. Array a -> Int -> a
+index_ xs i = unsafePartial $ unsafeIndex xs i
 
 foreign import nodeIndexOfImpl :: EffectFn1 Node Int
 foreign import setAnyImpl :: forall a. EffectFn3 String a Element Unit

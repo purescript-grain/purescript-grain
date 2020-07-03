@@ -5,6 +5,7 @@ module Grain.UI.Element
 
 import Prelude
 
+import Data.Maybe (Maybe)
 import Data.Tuple (Tuple)
 import Effect (Effect)
 import Grain.Styler (Styler)
@@ -14,10 +15,16 @@ import Grain.UI.Util (createElementNS_, createElement_)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 
+type SpecialProps =
+  { css :: Maybe String
+  , className :: Maybe String
+  }
+
 type VElementPart r =
   { tagName :: String
   , props :: Array (Tuple String String)
   , handlers :: Array (Tuple String (Event -> Effect Unit))
+  , specialProps :: SpecialProps
   | r
   }
 
@@ -36,6 +43,7 @@ allocElement args = do
     { isSvg: args.isSvg
     , styler: args.styler
     , nexts: args.next.props
+    , specialNexts: args.next.specialProps
     , element: el
     }
   allocHandlers
@@ -59,6 +67,8 @@ updateElement args = do
     , styler: args.styler
     , currents: args.current.props
     , nexts: args.next.props
+    , specialCurrents: args.current.specialProps
+    , specialNexts: args.next.specialProps
     , element: args.element
     }
   updateHandlers

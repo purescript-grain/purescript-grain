@@ -8,14 +8,14 @@ module Grain.UI.Diff
 import Prelude
 
 import Control.Monad.Rec.Class (Step(..), tailRecM)
-import Data.Array (length, unsafeIndex, (!!))
-import Data.Maybe (Maybe(..), fromJust)
+import Data.Array (length, (!!))
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Unsafe (unsafePerformEffect)
 import Grain.Effect (forE, foreachE)
 import Grain.MObject (MObject)
 import Grain.MObject as MO
-import Partial.Unsafe (unsafePartial)
+import Grain.UI.Util (index_, just)
 
 class HasKey c where
   getKey :: Int -> c -> String
@@ -305,9 +305,3 @@ keyToIdx { args: { currents }, st: { startC, endC } }
 eqKey :: Maybe String -> Maybe String -> Boolean
 eqKey (Just c) (Just n) = c == n
 eqKey _ _ = false
-
-just :: forall a. Maybe a -> a
-just x = unsafePartial $ fromJust x
-
-index_ :: forall c. Array c -> Int -> c
-index_ xs i = unsafePartial $ unsafeIndex xs i

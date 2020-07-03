@@ -4,59 +4,10 @@ import Prelude
 
 import Data.String.CodeUnits (singleton)
 import Data.String.Common (joinWith)
-import Grain.UI (VNode, prop)
-
--- | Define styles with CSS string.
--- |
--- | It generates a hash string as class name from CSS string, and the generated class name is used automatically.
--- |
--- | ```purescript
--- | justDiv :: VNode
--- | justDiv =
--- |   H.div # H.css styles
--- |
--- | styles :: String
--- | styles =
--- |   """
--- |   .& {
--- |     width: 100px;
--- |     height: 100px;
--- |   }
--- |   .&:hover {
--- |     width: 100px;
--- |     height: 100px;
--- |   }
--- |   .&:hover .selected {
--- |     color: blue;
--- |   }
--- |   """
--- | ```
--- |
--- | `&` in the CSS string is replaced with the generated class name, and output it as stylesheet.
--- |
--- | Like this:
--- |
--- | ```css
--- | .gz66dqm {
--- |   width: 100px;
--- |   height: 100px;
--- | }
--- | .gz66dqm:hover {
--- |   width: 100px;
--- |   height: 100px;
--- | }
--- | .gz66dqm:hover .selected {
--- |   color: blue;
--- | }
--- | ```
-css :: String -> VNode -> VNode
-css = prop "css"
+import Grain.UI (VNode, className, prop)
 
 style :: String -> VNode -> VNode
 style = prop "style"
-
-className :: String -> VNode -> VNode
-className = prop "className"
 
 classNames :: Array String -> VNode -> VNode
 classNames = joinWith " " >>> className

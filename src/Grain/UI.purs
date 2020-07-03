@@ -8,6 +8,8 @@ module Grain.UI
   , kids
   , prop
   , handle
+  , css
+  , className
   , didCreate
   , didUpdate
   , didDelete
@@ -64,6 +66,10 @@ data VElement
       , props :: Array (Tuple String String)
       , handlers :: Array (Tuple String (Event -> Effect Unit))
       , children :: Array VNode
+      , specialProps ::
+          { css :: Maybe String
+          , className :: Maybe String
+          }
       , didCreate :: Element -> Effect Unit
       , didUpdate :: Element -> Effect Unit
       , didDelete :: Element -> Effect Unit
@@ -115,6 +121,10 @@ element tagName = VNode Nothing $ VElement
   , props: []
   , handlers: []
   , children: []
+  , specialProps:
+      { css: Nothing
+      , className: Nothing
+      }
   , didCreate: const $ pure unit
   , didUpdate: const $ pure unit
   , didDelete: const $ pure unit
@@ -145,6 +155,59 @@ handle
 handle name handler (VNode k (VElement r)) =
   VNode k $ VElement r { handlers = snoc r.handlers (Tuple name handler) }
 handle _ _ velement = velement
+
+-- | Define styles with CSS string.
+-- |
+-- | It generates a hash string as class name from CSS string, and the generated class name is used automatically.
+-- |
+-- | ```purescript
+-- | justDiv :: VNode
+-- | justDiv =
+-- |   H.div # H.css styles
+-- |
+-- | styles :: String
+-- | styles =
+-- |   """
+-- |   .& {
+-- |     width: 100px;
+-- |     height: 100px;
+-- |   }
+-- |   .&:hover {
+-- |     width: 100px;
+-- |     height: 100px;
+-- |   }
+-- |   .&:hover .selected {
+-- |     color: blue;
+-- |   }
+-- |   """
+-- | ```
+-- |
+-- | `&` in the CSS string is replaced with the generated class name, and output it as stylesheet.
+-- |
+-- | Like this:
+-- |
+-- | ```css
+-- | .gz66dqm {
+-- |   width: 100px;
+-- |   height: 100px;
+-- | }
+-- | .gz66dqm:hover {
+-- |   width: 100px;
+-- |   height: 100px;
+-- | }
+-- | .gz66dqm:hover .selected {
+-- |   color: blue;
+-- | }
+-- | ```
+css :: String -> VNode -> VNode
+css val (VNode k (VElement r)) =
+  VNode k $ VElement r { specialProps { css = Just val } }
+css _ velement = velement
+
+className :: String -> VNode -> VNode
+className val (VNode k (VElement r)) =
+  VNode k $ VElement r { specialProps { className = Just val } }
+className _ velement = velement
 
 -- | Bind `didCreate` lifecycle.
 didCreate

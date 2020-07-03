@@ -5,12 +5,11 @@ module Grain.UI.Handler
 
 import Prelude
 
-import Data.Array (union)
-import Data.Maybe (Maybe(..))
 import Data.Nullable (null)
-import Data.Tuple (Tuple(..), fst, lookup)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Grain.Effect (foreachE)
+import Grain.UI.PropDiff (PatchArgs(..), diff)
 import Grain.UI.Util (setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
@@ -34,16 +33,21 @@ type UpdateArgs =
 
 updateHandlers :: UpdateArgs -> Effect Unit
 updateHandlers args =
-  let names = union (fst <$> args.currents) (fst <$> args.nexts)
-      updateByName name =
-        case lookup name args.currents, lookup name args.nexts of
-          Nothing, Nothing ->
-            pure unit
-          Just _, Nothing ->
-            removeHandler { name, element: args.element }
-          _, Just handler ->
-            setHandler { name, handler, element: args.element }
-   in foreachE names updateByName
+  diff (patch args.element)
+    { currents: args.currents
+    , nexts: args.nexts
+    }
+
+patch
+  :: Element
+  -> PatchArgs (Event -> Effect Unit)
+  -> Effect Unit
+patch element (Create { next: Tuple name handler }) =
+  setHandler { name, handler, element }
+patch element (Update { next: Tuple name handler }) =
+  setHandler { name, handler, element }
+patch element (Delete { current: Tuple name _ }) =
+  removeHandler { name, element }
 
 type SetArgs =
   { name :: String
