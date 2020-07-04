@@ -1,4 +1,4 @@
-module Grain.Emitter
+module Grain.Internal.Emitter
   ( Emitter
   , createEmitter
   , subscribe
@@ -11,7 +11,7 @@ import Prelude
 import Data.Array (filter, snoc)
 import Effect (Effect)
 import Effect.Ref (Ref, modify_, new, read)
-import Grain.Effect (sequenceE)
+import Grain.Internal.Effect (sequenceE)
 import Unsafe.Reference (unsafeRefEq)
 
 newtype Emitter = Emitter (Ref (Array (Effect Unit)))

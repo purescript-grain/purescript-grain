@@ -1,4 +1,4 @@
-module Grain.Styler
+module Grain.Internal.Styler
   ( Styler
   , mountStyler
   , registerStyle
@@ -17,8 +17,8 @@ import Data.String.Regex (replace)
 import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
-import Grain.MObject (MObject)
-import Grain.MObject as MO
+import Grain.Internal.MObject (MObject)
+import Grain.Internal.MObject as MO
 import Partial.Unsafe (unsafePartial)
 import Web.DOM.Document (createElement)
 import Web.DOM.Element as E

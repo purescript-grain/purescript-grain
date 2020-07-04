@@ -1,4 +1,4 @@
-module Grain.UI.PropDiff
+module Grain.Internal.PropDiff
   ( PatchArgs(..)
   , diff
   ) where
@@ -11,10 +11,10 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple, fst)
 import Effect (Effect)
 import Effect.Unsafe (unsafePerformEffect)
-import Grain.Effect (forE, foreachE)
-import Grain.MObject (MObject)
-import Grain.MObject as MO
-import Grain.UI.Util (index_, just)
+import Grain.Internal.Effect (forE, foreachE)
+import Grain.Internal.MObject (MObject)
+import Grain.Internal.MObject as MO
+import Grain.Internal.Util (index_, just)
 
 data PatchArgs a
   = Create

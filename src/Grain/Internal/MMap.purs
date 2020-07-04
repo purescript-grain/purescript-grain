@@ -1,4 +1,4 @@
-module Grain.MMap
+module Grain.Internal.MMap
   ( MMap
   , new
   , get

@@ -1,4 +1,4 @@
-module Grain.UI.Diff
+module Grain.Internal.Diff
   ( class HasKey
   , getKey
   , PatchArgs(..)
@@ -12,10 +12,10 @@ import Data.Array (length, (!!))
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Unsafe (unsafePerformEffect)
-import Grain.Effect (forE, foreachE)
-import Grain.MObject (MObject)
-import Grain.MObject as MO
-import Grain.UI.Util (index_, just)
+import Grain.Internal.Effect (forE, foreachE)
+import Grain.Internal.MObject (MObject)
+import Grain.Internal.MObject as MO
+import Grain.Internal.Util (index_, just)
 
 class HasKey c where
   getKey :: Int -> c -> String

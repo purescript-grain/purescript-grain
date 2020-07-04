@@ -1,4 +1,4 @@
-module Grain.MObject
+module Grain.Internal.MObject
   ( MObject
   , new
   , keys

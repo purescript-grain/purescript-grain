@@ -1,4 +1,4 @@
-module Grain.UI.Handler
+module Grain.Internal.Handler
   ( allocHandlers
   , updateHandlers
   ) where
@@ -8,9 +8,9 @@ import Prelude
 import Data.Nullable (null)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Grain.Effect (foreachE)
-import Grain.UI.PropDiff (PatchArgs(..), diff)
-import Grain.UI.Util (setAny)
+import Grain.Internal.Effect (foreachE)
+import Grain.Internal.PropDiff (PatchArgs(..), diff)
+import Grain.Internal.Util (setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 import Web.Event.EventTarget (eventListener)

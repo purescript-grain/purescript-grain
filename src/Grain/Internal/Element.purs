@@ -1,4 +1,4 @@
-module Grain.UI.Element
+module Grain.Internal.Element
   ( allocElement
   , updateElement
   ) where
@@ -8,10 +8,10 @@ import Prelude
 import Data.Maybe (Maybe)
 import Data.Tuple (Tuple)
 import Effect (Effect)
-import Grain.Styler (Styler)
-import Grain.UI.Handler (allocHandlers, updateHandlers)
-import Grain.UI.Prop (allocProps, updateProps)
-import Grain.UI.Util (createElementNS_, createElement_)
+import Grain.Internal.Handler (allocHandlers, updateHandlers)
+import Grain.Internal.Prop (allocProps, updateProps)
+import Grain.Internal.Styler (Styler)
+import Grain.Internal.Util (createElementNS_, createElement_)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 

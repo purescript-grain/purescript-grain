@@ -1,4 +1,4 @@
-module Grain.Effect
+module Grain.Internal.Effect
   ( forE
   , foreachE
   , sequenceE

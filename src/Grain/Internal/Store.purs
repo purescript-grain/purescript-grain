@@ -1,4 +1,4 @@
-module Grain.Store
+module Grain.Internal.Store
   ( Store
   , createStore
   , readGrain
@@ -15,11 +15,11 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Grain.Class (class Grain, initialState, keyOf, typeRefOf)
-import Grain.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
-import Grain.MMap (MMap)
-import Grain.MMap as MM
-import Grain.MObject (MObject)
-import Grain.MObject as MO
+import Grain.Internal.Emitter (Emitter, createEmitter, emit, subscribe, unsubscribe)
+import Grain.Internal.MMap (MMap)
+import Grain.Internal.MMap as MM
+import Grain.Internal.MObject (MObject)
+import Grain.Internal.MObject as MO
 import Grain.TypeRef (TypeRef)
 import Unsafe.Coerce (unsafeCoerce)
 

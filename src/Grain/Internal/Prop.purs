@@ -1,4 +1,4 @@
-module Grain.UI.Prop
+module Grain.Internal.Prop
   ( allocProps
   , updateProps
   ) where
@@ -8,10 +8,10 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Grain.Effect (foreachE)
-import Grain.Styler (Styler, registerStyle)
-import Grain.UI.PropDiff (PatchArgs(..), diff)
-import Grain.UI.Util (hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
+import Grain.Internal.Effect (foreachE)
+import Grain.Internal.PropDiff (PatchArgs(..), diff)
+import Grain.Internal.Styler (Styler, registerStyle)
+import Grain.Internal.Util (hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
 import Web.DOM.Element (Element, removeAttribute, setAttribute)
 
 type SpecialProps =

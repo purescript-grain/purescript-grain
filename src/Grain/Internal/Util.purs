@@ -1,4 +1,4 @@
-module Grain.UI.Util
+module Grain.Internal.Util
   ( raf
   , nodeIndexOf
   , putNode

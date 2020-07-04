@@ -36,16 +36,16 @@ import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Grain.Class (class Grain, which)
-import Grain.Effect (sequenceE)
-import Grain.MMap (MMap)
-import Grain.MMap as MM
-import Grain.MObject (MObject)
-import Grain.MObject as MO
-import Grain.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
-import Grain.Styler (Styler, mountStyler)
-import Grain.UI.Diff (class HasKey, PatchArgs(..), diff)
-import Grain.UI.Element (allocElement, updateElement)
-import Grain.UI.Util (createText_, nodeIndexOf, putNode, raf)
+import Grain.Internal.Diff (class HasKey, PatchArgs(..), diff)
+import Grain.Internal.Effect (sequenceE)
+import Grain.Internal.Element (allocElement, updateElement)
+import Grain.Internal.MMap (MMap)
+import Grain.Internal.MMap as MM
+import Grain.Internal.MObject (MObject)
+import Grain.Internal.MObject as MO
+import Grain.Internal.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
+import Grain.Internal.Styler (Styler, mountStyler)
+import Grain.Internal.Util (createText_, nodeIndexOf, putNode, raf)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Element as E
