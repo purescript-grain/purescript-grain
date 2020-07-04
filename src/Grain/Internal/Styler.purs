@@ -8,25 +8,21 @@ import Prelude
 
 import Data.Char (toCharCode)
 import Data.Foldable (foldr)
+import Data.Function.Uncurried as Fn
 import Data.Int (base36, toStringAs)
 import Data.Int.Bits (xor, zshr)
-import Data.Maybe (fromJust)
 import Data.String (Pattern(..), Replacement(..), joinWith, replaceAll, trim)
 import Data.String.CodeUnits (toCharArray)
 import Data.String.Regex (replace)
 import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
+import Effect.Uncurried as EFn
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Partial.Unsafe (unsafePartial)
-import Web.DOM.Document (createElement)
+import Grain.Internal.Util (appendChild, createElement, head, setTextContent)
 import Web.DOM.Element as E
-import Web.DOM.Node (Node, appendChild, setTextContent)
-import Web.HTML (window)
-import Web.HTML.HTMLDocument (head, toDocument)
-import Web.HTML.HTMLElement (toNode)
-import Web.HTML.Window (document)
+import Web.DOM.Node (Node)
 
 newtype Styler = Styler
   { node :: Node
@@ -39,20 +35,20 @@ mountStyler = do
   stylesRef <- MO.new
   pure $ Styler { node, stylesRef }
 
-registerStyle :: String -> Styler -> Effect String
-registerStyle style (Styler s) = do
+registerStyle :: EFn.EffectFn2 String Styler String
+registerStyle = EFn.mkEffectFn2 \style (Styler s) -> do
   let minified = minify style
       name = "g" <> generateHash minified
-  exists <- MO.has name s.stylesRef
+  exists <- EFn.runEffectFn2 MO.has name s.stylesRef
   unless exists do
-    let output = replaceToken name minified
-    MO.set name output s.stylesRef
-    vs <- MO.values s.stylesRef
-    setTextContent (joinWith "" vs) s.node
+    let output = Fn.runFn2 replaceToken name minified
+    EFn.runEffectFn3 MO.set name output s.stylesRef
+    vs <- EFn.runEffectFn1 MO.values s.stylesRef
+    EFn.runEffectFn2 setTextContent (joinWith "" vs) s.node
   pure name
 
-replaceToken :: String -> String -> String
-replaceToken instead target =
+replaceToken :: Fn.Fn2 String String String
+replaceToken = Fn.mkFn2 \instead target ->
   replaceAll (Pattern "&") (Replacement instead) target
 
 minify :: String -> String
@@ -69,9 +65,6 @@ generateHash str = toStringAs base36 $ zshr seed 0
 
 createStyleNode :: Effect Node
 createStyleNode = do
-  el <- window >>= document <#> toDocument >>= createElement "style"
-  getHead >>= appendChild (E.toNode el)
-
-getHead :: Effect Node
-getHead =
-  unsafePartial $ fromJust <$> (window >>= document >>= head) <#> toNode
+  h <- head
+  el <- EFn.runEffectFn1 createElement "style"
+  EFn.runEffectFn2 appendChild (E.toNode el) h

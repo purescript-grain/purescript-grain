@@ -1,24 +1,24 @@
 'use strict';
 
-exports.forEImpl = function(lo, hi, f) {
+exports.forE = function(lo, hi, f) {
   var i = lo;
 
   while (i < hi) {
-    f(i)();
+    f(i);
     i = (i + 1) | 0;
   }
 }
 
-exports.foreachEImpl = function(xs, f) {
+exports.foreachE = function(xs, f) {
   var i = 0;
 
   while (i < xs.length) {
-    f(xs[i])();
+    f(xs[i]);
     i = (i + 1) | 0;
   }
 }
 
-exports.sequenceEImpl = function(fs) {
+exports.sequenceE = function(fs) {
   var i = 0;
 
   while (i < fs.length) {

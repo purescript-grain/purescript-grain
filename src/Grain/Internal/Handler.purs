@@ -1,5 +1,6 @@
 module Grain.Internal.Handler
-  ( allocHandlers
+  ( Handlers
+  , allocHandlers
   , updateHandlers
   ) where
 
@@ -8,62 +9,38 @@ import Prelude
 import Data.Nullable (null)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
+import Effect.Uncurried as EFn
 import Grain.Internal.Effect (foreachE)
 import Grain.Internal.PropDiff (PatchArgs(..), diff)
-import Grain.Internal.Util (setAny)
+import Grain.Internal.Util (mkEventListener, setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
-import Web.Event.EventTarget (eventListener)
 
-type AllocArgs =
-  { nexts :: Array (Tuple String (Event -> Effect Unit))
-  , element :: Element
-  }
+type Handlers =
+  Array (Tuple String (Event -> Effect Unit))
 
-allocHandlers :: AllocArgs -> Effect Unit
-allocHandlers args =
-  foreachE args.nexts \(Tuple name handler) ->
-    setHandler { name, handler, element: args.element }
+allocHandlers :: EFn.EffectFn2 Handlers Element Unit
+allocHandlers = EFn.mkEffectFn2 \nexts element ->
+  EFn.runEffectFn2 foreachE nexts $ EFn.mkEffectFn1 \(Tuple name handler) ->
+    EFn.runEffectFn3 setHandler name handler element
 
-type UpdateArgs =
-  { currents :: Array (Tuple String (Event -> Effect Unit))
-  , nexts :: Array (Tuple String (Event -> Effect Unit))
-  , element :: Element
-  }
-
-updateHandlers :: UpdateArgs -> Effect Unit
-updateHandlers args =
-  diff (patch args.element)
-    { currents: args.currents
-    , nexts: args.nexts
-    }
+updateHandlers :: EFn.EffectFn3 Handlers Handlers Element Unit
+updateHandlers = EFn.mkEffectFn3 \currents nexts element ->
+  EFn.runEffectFn2 diff (patch element) { currents, nexts }
 
 patch
   :: Element
-  -> PatchArgs (Event -> Effect Unit)
-  -> Effect Unit
-patch element (Create { next: Tuple name handler }) =
-  setHandler { name, handler, element }
-patch element (Update { next: Tuple name handler }) =
-  setHandler { name, handler, element }
-patch element (Delete { current: Tuple name _ }) =
-  removeHandler { name, element }
+  -> EFn.EffectFn1 (PatchArgs (Event -> Effect Unit)) Unit
+patch element = EFn.mkEffectFn1 \act ->
+  case act of
+    Create { next: Tuple name handler } ->
+      EFn.runEffectFn3 setHandler name handler element
+    Update { next: Tuple name handler } ->
+      EFn.runEffectFn3 setHandler name handler element
+    Delete { current: Tuple name _ } ->
+      EFn.runEffectFn3 setAny name null element
 
-type SetArgs =
-  { name :: String
-  , handler :: Event -> Effect Unit
-  , element :: Element
-  }
-
-setHandler :: SetArgs -> Effect Unit
-setHandler args = do
-  listener <- eventListener args.handler
-  setAny args.name listener args.element
-
-type RemoveArgs =
-  { name :: String
-  , element :: Element
-  }
-
-removeHandler :: RemoveArgs -> Effect Unit
-removeHandler args = setAny args.name null args.element
+setHandler :: EFn.EffectFn3 String (Event -> Effect Unit) Element Unit
+setHandler = EFn.mkEffectFn3 \name handler element ->
+  let listener = mkEventListener handler
+   in EFn.runEffectFn3 setAny name listener element

@@ -9,13 +9,14 @@ import Prelude
 
 import Control.Monad.Rec.Class (Step(..), tailRecM)
 import Data.Array (length, (!!))
+import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Unsafe (unsafePerformEffect)
+import Effect.Uncurried as EFn
 import Grain.Internal.Effect (forE, foreachE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (index_, just)
+import Grain.Internal.Util (byIdx, just)
 
 class HasKey c where
   getKey :: Int -> c -> String
@@ -54,7 +55,7 @@ data PatchArgs ctx p c
       }
 
 type Patch ctx p c =
-  PatchArgs ctx p c -> Effect Unit
+  EFn.EffectFn1 (PatchArgs ctx p c) Unit
 
 type DiffArgs ctx p c =
   { context :: ctx
@@ -66,20 +67,18 @@ type DiffArgs ctx p c =
 diff
   :: forall ctx p c
    . HasKey c
-  => Patch ctx p c
-  -> DiffArgs ctx p c
-  -> Effect Unit
-diff patch args@{ context, parentNode, currents, nexts } = do
+  => EFn.EffectFn2 (Patch ctx p c) (DiffArgs ctx p c) Unit
+diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> do
   let lengthC = length currents
       lengthN = length nexts
   case lengthC, lengthN of
     0, 0 ->
       pure unit
     0, l ->
-      forE 0 l \i -> do
-        let next = index_ nexts i
+      EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
+        let next = Fn.runFn2 byIdx nexts i
             nodeKey = getKey i next
-        patch $ Create
+        EFn.runEffectFn1 patch $ Create
           { context
           , parentNode
           , nodeKey
@@ -87,10 +86,10 @@ diff patch args@{ context, parentNode, currents, nexts } = do
           , next
           }
     l, 0 ->
-      forE 0 l \i -> do
-        let current = index_ currents i
+      EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
+        let current = Fn.runFn2 byIdx currents i
             nodeKey = getKey i current
-        patch $ Delete
+        EFn.runEffectFn1 patch $ Delete
           { context
           , parentNode
           , nodeKey
@@ -109,7 +108,7 @@ diff patch args@{ context, parentNode, currents, nexts } = do
             , endN: lengthN - 1
             }
         }
-      ktoi <- keyToIdx args1
+      ktoi <- EFn.runEffectFn1 keyToIdx args1
       tailRecM diff2
         { patch
         , args
@@ -156,13 +155,13 @@ diff1 args1@{ patch, args, st }
           keyStartN = getKey st.startN <$> vnodeStartN
           keyEndN = getKey st.endN <$> vnodeEndN
 
-          eqStart = eqKey keyStartC keyStartN
-          eqEnd = eqKey keyEndC keyEndN
-          eqStartEnd = eqKey keyStartC keyEndN
-          eqEndStart = eqKey keyEndC keyStartN
+          eqStart = Fn.runFn2 eqKey keyStartC keyStartN
+          eqEnd = Fn.runFn2 eqKey keyEndC keyEndN
+          eqStartEnd = Fn.runFn2 eqKey keyStartC keyEndN
+          eqEndStart = Fn.runFn2 eqKey keyEndC keyStartN
 
       if eqStart then do
-        patch $ Update
+        EFn.runEffectFn1 patch $ Update
           { context: args.context
           , parentNode: args.parentNode
           , nodeKey: just keyStartN
@@ -176,7 +175,7 @@ diff1 args1@{ patch, args, st }
               }
           }
       else if eqEnd then do
-        patch $ Update
+        EFn.runEffectFn1 patch $ Update
           { context: args.context
           , parentNode: args.parentNode
           , nodeKey: just keyEndN
@@ -192,7 +191,7 @@ diff1 args1@{ patch, args, st }
       else if eqStartEnd then do
         let delta = st.lengthN - 1 - st.endN
             index = st.lengthC - 1 - delta
-        patch $ Move
+        EFn.runEffectFn1 patch $ Move
           { context: args.context
           , parentNode: args.parentNode
           , nodeKey: just keyEndN
@@ -207,7 +206,7 @@ diff1 args1@{ patch, args, st }
               }
           }
       else if eqEndStart then do
-        patch $ Move
+        EFn.runEffectFn1 patch $ Move
           { context: args.context
           , parentNode: args.parentNode
           , nodeKey: just keyStartN
@@ -243,12 +242,12 @@ diff2
   -> Effect (Step (Diff2Args ctx p c) Unit)
 diff2 args2@{ patch, args, st }
   | st.startN <= st.endN = do
-      let vnodeN = index_ args.nexts st.startN
+      let vnodeN = Fn.runFn2 byIdx args.nexts st.startN
           keyN = getKey st.startN vnodeN
-      mIdxC <- MO.get keyN st.ktoi
+      mIdxC <- EFn.runEffectFn2 MO.get keyN st.ktoi
       case mIdxC of
         Nothing -> do
-          patch $ Create
+          EFn.runEffectFn1 patch $ Create
             { context: args.context
             , parentNode: args.parentNode
             , nodeKey: keyN
@@ -261,8 +260,8 @@ diff2 args2@{ patch, args, st }
                 }
             }
         Just idxC -> do
-          let vnodeC = index_ args.currents idxC
-          patch $ Move
+          let vnodeC = Fn.runFn2 byIdx args.currents idxC
+          EFn.runEffectFn1 patch $ Move
             { context: args.context
             , parentNode: args.parentNode
             , nodeKey: keyN
@@ -270,16 +269,16 @@ diff2 args2@{ patch, args, st }
             , current: vnodeC
             , next: vnodeN
             }
-          MO.del keyN st.ktoi
+          EFn.runEffectFn2 MO.del keyN st.ktoi
           pure $ Loop args2
             { st = st { startN = st.startN + 1 }
             }
-  | unsafePerformEffect (MO.size st.ktoi) > 0 = do
-      ks <- MO.keys st.ktoi
-      foreachE ks \keyC -> do
-        idxC <- MO.unsafeGet keyC st.ktoi
-        let vnodeC = index_ args.currents idxC
-        patch $ Delete
+  | MO.unsafeSize st.ktoi > 0 = do
+      ks <- EFn.runEffectFn1 MO.keys st.ktoi
+      EFn.runEffectFn2 foreachE ks $ EFn.mkEffectFn1 \keyC -> do
+        idxC <- EFn.runEffectFn2 MO.unsafeGet keyC st.ktoi
+        let vnodeC = Fn.runFn2 byIdx args.currents idxC
+        EFn.runEffectFn1 patch $ Delete
           { context: args.context
           , parentNode: args.parentNode
           , nodeKey: keyC
@@ -292,16 +291,21 @@ diff2 args2@{ patch, args, st }
 keyToIdx
   :: forall ctx p c
    . HasKey c
-  => Diff1Args ctx p c
-  -> Effect (MObject Int)
-keyToIdx { args: { currents }, st: { startC, endC } }
-  | startC > endC = MO.new
-  | otherwise = do
+  => EFn.EffectFn1 (Diff1Args ctx p c) (MObject Int)
+keyToIdx = EFn.mkEffectFn1 \{ args, st } ->
+  if st.startC > st.endC
+    then MO.new
+    else do
       ktoi <- MO.new
-      forE startC (endC + 1) \idx ->
-        MO.set (getKey idx $ index_ currents idx) idx ktoi
+      EFn.runEffectFn3 forE st.startC (st.endC + 1) $ EFn.mkEffectFn1 \idx -> do
+        let key = getKey idx $ Fn.runFn2 byIdx args.currents idx
+        EFn.runEffectFn3 MO.set key idx ktoi
       pure ktoi
 
-eqKey :: Maybe String -> Maybe String -> Boolean
-eqKey (Just c) (Just n) = c == n
-eqKey _ _ = false
+eqKey :: Fn.Fn2 (Maybe String) (Maybe String) Boolean
+eqKey = Fn.mkFn2 \mc mn ->
+  case mc, mn of
+    Just c, Just n ->
+      c == n
+    _, _ ->
+      false

@@ -12,25 +12,17 @@ import Prelude
 import Data.Maybe (Maybe)
 import Data.Nullable (Nullable, toMaybe)
 import Effect (Effect)
-import Effect.Uncurried (EffectFn2, EffectFn3, runEffectFn2, runEffectFn3)
-import Unsafe.Coerce (unsafeCoerce)
+import Effect.Uncurried as EFn
 
 foreign import data MMap :: Type -> Type -> Type
 
 foreign import new :: forall a b. Effect (MMap a b)
 
-get :: forall a b. a -> MMap a b -> Effect (Maybe b)
-get k m = toMaybe <$> runEffectFn2 getImpl k m
+get :: forall a b. EFn.EffectFn2 a (MMap a b) (Maybe b)
+get = EFn.mkEffectFn2 \k m ->
+  toMaybe <$> EFn.runEffectFn2 getImpl k m
 
-set :: forall a b. a -> b -> MMap a b -> Effect Unit
-set k v m = runEffectFn3 setImpl k v m
-
-del :: forall a b. a -> MMap a b -> Effect Unit
-del k m = runEffectFn2 delImpl k m
-
-unsafeGet :: forall a b. a -> MMap a b -> Effect b
-unsafeGet k m = unsafeCoerce $ runEffectFn2 getImpl k m
-
-foreign import getImpl :: forall a b. EffectFn2 a (MMap a b) (Nullable b)
-foreign import setImpl :: forall a b. EffectFn3 a b (MMap a b) Unit
-foreign import delImpl :: forall a b. EffectFn2 a (MMap a b) Unit
+foreign import getImpl :: forall a b. EFn.EffectFn2 a (MMap a b) (Nullable b)
+foreign import set :: forall a b. EFn.EffectFn3 a b (MMap a b) Unit
+foreign import del :: forall a b. EFn.EffectFn2 a (MMap a b) Unit
+foreign import unsafeGet :: forall a b. EFn.EffectFn2 a (MMap a b) b

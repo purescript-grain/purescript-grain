@@ -8,10 +8,14 @@ exports.getImpl = function(k, m) {
   return m.get(k);
 }
 
-exports.setImpl = function(k, v, m) {
+exports.set = function(k, v, m) {
   m.set(k, v);
 }
 
-exports.delImpl = function(k, m) {
+exports.del = function(k, m) {
   m.delete(k);
+}
+
+exports.unsafeGet = function(k, m) {
+  return m.get(k);
 }

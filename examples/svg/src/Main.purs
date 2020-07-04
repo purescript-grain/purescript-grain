@@ -34,11 +34,11 @@ view =
                 # H.kids [ H.text "Grain" ]
             ]
         , H.element "g" # H.kids
-            [ H.element "use" # H.css useStyles # H.prop "xlink:href" "#s-text"
-            , H.element "use" # H.css useStyles # H.prop "xlink:href" "#s-text"
-            , H.element "use" # H.css useStyles # H.prop "xlink:href" "#s-text"
-            , H.element "use" # H.css useStyles # H.prop "xlink:href" "#s-text"
-            , H.element "use" # H.css useStyles # H.prop "xlink:href" "#s-text"
+            [ H.element "use" # H.css useStyles # H.href "#s-text"
+            , H.element "use" # H.css useStyles # H.href "#s-text"
+            , H.element "use" # H.css useStyles # H.href "#s-text"
+            , H.element "use" # H.css useStyles # H.href "#s-text"
+            , H.element "use" # H.css useStyles # H.href "#s-text"
             ]
         ]
   where

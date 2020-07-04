@@ -7,14 +7,15 @@ import Prelude
 
 import Control.Monad.Rec.Class (Step(..), tailRecM)
 import Data.Array (length, (!!))
+import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple, fst)
 import Effect (Effect)
-import Effect.Unsafe (unsafePerformEffect)
+import Effect.Uncurried as EFn
 import Grain.Internal.Effect (forE, foreachE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (index_, just)
+import Grain.Internal.Util (byIdx, just)
 
 data PatchArgs a
   = Create
@@ -29,7 +30,7 @@ data PatchArgs a
       }
 
 type Patch a =
-  PatchArgs a -> Effect Unit
+  EFn.EffectFn1 (PatchArgs a) Unit
 
 type DiffArgs a =
   { currents :: Array (Tuple String a)
@@ -38,23 +39,21 @@ type DiffArgs a =
 
 diff
   :: forall a
-   . Patch a
-  -> DiffArgs a
-  -> Effect Unit
-diff patch args@{ currents, nexts } = do
+   . EFn.EffectFn2 (Patch a) (DiffArgs a) Unit
+diff = EFn.mkEffectFn2 \patch args@{ currents, nexts } -> do
   let lengthC = length currents
       lengthN = length nexts
   case lengthC, lengthN of
     0, 0 ->
       pure unit
     0, l ->
-      forE 0 l \i -> do
-        let next = index_ nexts i
-        patch $ Create { next }
+      EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
+        let next = Fn.runFn2 byIdx nexts i
+        EFn.runEffectFn1 patch $ Create { next }
     l, 0 ->
-      forE 0 l \i -> do
-        let current = index_ currents i
-        patch $ Delete { current }
+      EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
+        let current = Fn.runFn2 byIdx currents i
+        EFn.runEffectFn1 patch $ Delete { current }
     _, _ -> do
       args1 <- tailRecM diff1
         { patch
@@ -66,7 +65,7 @@ diff patch args@{ currents, nexts } = do
             , endN: lengthN - 1
             }
         }
-      ntoi <- nameToIdx args1
+      ntoi <- EFn.runEffectFn1 nameToIdx args1
       tailRecM diff2
         { patch
         , args
@@ -110,13 +109,13 @@ diff1 args1@{ patch, args, st }
           nameStartN = fst <$> tupleStartN
           nameEndN = fst <$> tupleEndN
 
-          eqStart = eqName nameStartC nameStartN
-          eqEnd = eqName nameEndC nameEndN
-          eqStartEnd = eqName nameStartC nameEndN
-          eqEndStart = eqName nameEndC nameStartN
+          eqStart = Fn.runFn2 eqName nameStartC nameStartN
+          eqEnd = Fn.runFn2 eqName nameEndC nameEndN
+          eqStartEnd = Fn.runFn2 eqName nameStartC nameEndN
+          eqEndStart = Fn.runFn2 eqName nameEndC nameStartN
 
       if eqStart then do
-        patch $ Update
+        EFn.runEffectFn1 patch $ Update
           { current: just tupleStartC
           , next: just tupleStartN
           }
@@ -127,7 +126,7 @@ diff1 args1@{ patch, args, st }
               }
           }
       else if eqEnd then do
-        patch $ Update
+        EFn.runEffectFn1 patch $ Update
           { current: just tupleEndC
           , next: just tupleEndN
           }
@@ -138,7 +137,7 @@ diff1 args1@{ patch, args, st }
               }
           }
       else if eqStartEnd then do
-        patch $ Update
+        EFn.runEffectFn1 patch $ Update
           { current: just tupleStartC
           , next: just tupleEndN
           }
@@ -149,7 +148,7 @@ diff1 args1@{ patch, args, st }
               }
           }
       else if eqEndStart then do
-        patch $ Update
+        EFn.runEffectFn1 patch $ Update
           { current: just tupleEndC
           , next: just tupleStartN
           }
@@ -180,49 +179,54 @@ diff2
   -> Effect (Step (Diff2Args a) Unit)
 diff2 args2@{ patch, args, st }
   | st.startN <= st.endN = do
-      let tupleN = index_ args.nexts st.startN
+      let tupleN = Fn.runFn2 byIdx args.nexts st.startN
           nameN = fst tupleN
-      mIdxC <- MO.get nameN st.ntoi
+      mIdxC <- EFn.runEffectFn2 MO.get nameN st.ntoi
       case mIdxC of
         Nothing -> do
-          patch $ Create { next: tupleN }
+          EFn.runEffectFn1 patch $ Create { next: tupleN }
           pure $ Loop args2
             { st = st
                 { startN = st.startN + 1
                 }
             }
         Just idxC -> do
-          let tupleC = index_ args.currents idxC
-          patch $ Update
+          let tupleC = Fn.runFn2 byIdx args.currents idxC
+          EFn.runEffectFn1 patch $ Update
             { current: tupleC
             , next: tupleN
             }
-          MO.del nameN st.ntoi
+          EFn.runEffectFn2 MO.del nameN st.ntoi
           pure $ Loop args2
             { st = st { startN = st.startN + 1 }
             }
-  | unsafePerformEffect (MO.size st.ntoi) > 0 = do
-      ns <- MO.keys st.ntoi
-      foreachE ns \nameC -> do
-        idxC <- MO.unsafeGet nameC st.ntoi
-        let tupleC = index_ args.currents idxC
-        patch $ Delete { current: tupleC }
+  | MO.unsafeSize st.ntoi > 0 = do
+      ns <- EFn.runEffectFn1 MO.keys st.ntoi
+      EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
+        idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
+        let tupleC = Fn.runFn2 byIdx args.currents idxC
+        EFn.runEffectFn1 patch $ Delete { current: tupleC }
       pure $ Done unit
   | otherwise =
       pure $ Done unit
 
 nameToIdx
   :: forall a
-   . Diff1Args a
-  -> Effect (MObject Int)
-nameToIdx { args: { currents }, st: { startC, endC } }
-  | startC > endC = MO.new
-  | otherwise = do
+   . EFn.EffectFn1 (Diff1Args a) (MObject Int)
+nameToIdx = EFn.mkEffectFn1 \{ args, st } ->
+  if st.startC > st.endC
+    then MO.new
+    else do
       ntoi <- MO.new
-      forE startC (endC + 1) \idx ->
-        MO.set (fst $ index_ currents idx) idx ntoi
+      EFn.runEffectFn3 forE st.startC (st.endC + 1) $ EFn.mkEffectFn1 \idx -> do
+        let name = fst (Fn.runFn2 byIdx args.currents idx)
+        EFn.runEffectFn3 MO.set name idx ntoi
       pure ntoi
 
-eqName :: Maybe String -> Maybe String -> Boolean
-eqName (Just c) (Just n) = c == n
-eqName _ _ = false
+eqName :: Fn.Fn2 (Maybe String) (Maybe String) Boolean
+eqName = Fn.mkFn2 \mc mn ->
+  case mc, mn of
+    Just c, Just n ->
+      c == n
+    _, _ ->
+      false

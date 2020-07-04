@@ -1,177 +1,80 @@
 module Grain.Internal.Prop
-  ( allocProps
+  ( Props
+  , allocProps
   , updateProps
   ) where
 
 import Prelude
 
-import Data.Maybe (Maybe(..))
+import Data.Array (elemIndex)
+import Data.Function.Uncurried as Fn
+import Data.Maybe (isJust)
 import Data.Tuple (Tuple(..))
-import Effect (Effect)
+import Effect.Uncurried as EFn
 import Grain.Internal.Effect (foreachE)
 import Grain.Internal.PropDiff (PatchArgs(..), diff)
-import Grain.Internal.Styler (Styler, registerStyle)
-import Grain.Internal.Util (hasXlinkPrefix, isBoolean, isProperty, removeAttributeNS_, setAny, setAttributeNS_)
-import Web.DOM.Element (Element, removeAttribute, setAttribute)
+import Grain.Internal.Util (isBoolean, isProperty, removeAttribute, setAny, setAttribute)
+import Web.DOM.Element (Element)
 
-type SpecialProps =
-  { css :: Maybe String
-  , className :: Maybe String
-  }
+type Props =
+  Array (Tuple String String)
 
-type AllocArgs =
-  { isSvg :: Boolean
-  , styler :: Styler
-  , nexts :: Array (Tuple String String)
-  , specialNexts :: SpecialProps
-  , element :: Element
-  }
+allocProps
+  :: EFn.EffectFn3 Boolean Props Element Unit
+allocProps = EFn.mkEffectFn3 \isSvg nexts element ->
+  EFn.runEffectFn2 foreachE nexts $ EFn.mkEffectFn1 \(Tuple name val) ->
+    EFn.runEffectFn4 setProp isSvg name val element
 
-allocProps :: AllocArgs -> Effect Unit
-allocProps args = do
-  allocClassName args
-  foreachE args.nexts \(Tuple name val) ->
-    setProp
-      { isSvg: args.isSvg
-      , name
-      , val
-      , element: args.element
-      }
-
-type UpdateArgs =
-  { isSvg :: Boolean
-  , styler :: Styler
-  , currents :: Array (Tuple String String)
-  , nexts :: Array (Tuple String String)
-  , specialCurrents :: SpecialProps
-  , specialNexts :: SpecialProps
-  , element :: Element
-  }
-
-updateProps :: UpdateArgs -> Effect Unit
-updateProps args = do
-  updateClassName args
-  diff (patch args)
-    { currents: args.currents
-    , nexts: args.nexts
-    }
+updateProps
+  :: EFn.EffectFn4 Boolean Props Props Element Unit
+updateProps = EFn.mkEffectFn4 \isSvg currents nexts element ->
+  EFn.runEffectFn2 diff (patch isSvg element) { currents, nexts }
 
 patch
-  :: UpdateArgs
-  -> PatchArgs String
-  -> Effect Unit
-patch args (Create { next: Tuple name n }) =
-  setProp
-    { isSvg: args.isSvg
-    , name
-    , val: n
-    , element: args.element
-    }
-patch args (Delete { current: Tuple name _ }) =
-  removeProp
-    { isSvg: args.isSvg
-    , name
-    , element: args.element
-    }
-patch args (Update { current: Tuple _ c, next: Tuple name n }) =
-  when (c /= n) do
-    setProp
-      { isSvg: args.isSvg
-      , name
-      , val: n
-      , element: args.element
-      }
+  :: Boolean
+  -> Element
+  -> EFn.EffectFn1 (PatchArgs String) Unit
+patch isSvg element = EFn.mkEffectFn1 \act ->
+  case act of
+    Create { next: Tuple name val } ->
+      EFn.runEffectFn4 setProp isSvg name val element
+    Delete { current: Tuple name _ } ->
+      EFn.runEffectFn3 removeProp isSvg name element
+    Update { current: Tuple _ c, next: Tuple name n } ->
+      when (c /= n) (EFn.runEffectFn4 setProp isSvg name n element)
 
-type SetArgs =
-  { isSvg :: Boolean
-  , name :: String
-  , val :: String
-  , element :: Element
-  }
-
-setProp :: SetArgs -> Effect Unit
-setProp args =
-  case args.name of
-    "style" ->
-      setAttribute "style" args.val args.element
-    "list" ->
-      setAttribute "list" args.val args.element
-    "form" ->
-      setAttribute "form" args.val args.element
-    "dropzone" ->
-      setAttribute "dropzone" args.val args.element
-    _ ->
-      if isProperty args.name args.element && not args.isSvg
+setProp :: EFn.EffectFn4 Boolean String String Element Unit
+setProp = EFn.mkEffectFn4 \isSvg name val element ->
+  if isAttribute name
+    then
+      EFn.runEffectFn3 setAttribute name val element
+    else
+      if Fn.runFn2 isProperty name element && not isSvg
         then
-          if isBoolean args.name args.element
-            then setAny args.name (args.val /= "false") args.element
-            else setAny args.name args.val args.element
+          if Fn.runFn2 isBoolean name element
+            then EFn.runEffectFn3 setAny name (val /= "false") element
+            else EFn.runEffectFn3 setAny name val element
         else
-          if args.isSvg && hasXlinkPrefix args.name
-            then setAttributeNS_ args.name args.val args.element
-            else setAttribute args.name args.val args.element
+          EFn.runEffectFn3 setAttribute name val element
 
-type RemoveArgs =
-  { isSvg :: Boolean
-  , name :: String
-  , element :: Element
-  }
+removeProp :: EFn.EffectFn3 Boolean String Element Unit
+removeProp = EFn.mkEffectFn3 \isSvg name element ->
+  if isAttribute name
+    then
+      EFn.runEffectFn2 removeAttribute name element
+    else do
+      when (Fn.runFn2 isProperty name element && not isSvg) do
+        EFn.runEffectFn3 setAny name "" element
+      EFn.runEffectFn2 removeAttribute name element
 
-removeProp :: RemoveArgs -> Effect Unit
-removeProp args =
-  case args.name of
-    "style" ->
-      removeAttribute "style" args.element
-    "list" ->
-      removeAttribute "list" args.element
-    "form" ->
-      removeAttribute "form" args.element
-    "dropzone" ->
-      removeAttribute "dropzone" args.element
-    _ ->
-      if args.isSvg && hasXlinkPrefix args.name
-        then removeAttributeNS_ args.name args.element
-        else do
-          when (isProperty args.name args.element && not args.isSvg) do
-            setAny args.name "" args.element
-          removeAttribute args.name args.element
+isAttribute :: String -> Boolean
+isAttribute name =
+  isJust $ elemIndex name attributes
 
-allocClassName :: AllocArgs -> Effect Unit
-allocClassName args = do
-  mn <- getClassName args.styler args.specialNexts
-  case mn of
-    Nothing ->
-      pure unit
-    Just n ->
-      if args.isSvg
-        then setAttribute "class" n args.element
-        else setAny "className" n args.element
-
-updateClassName :: UpdateArgs -> Effect Unit
-updateClassName args = do
-  mc <- getClassName args.styler args.specialCurrents
-  mn <- getClassName args.styler args.specialNexts
-  case mc, mn of
-    Nothing, Nothing ->
-      pure unit
-    Just _, Nothing -> do
-      when (not args.isSvg) do
-        setAny "className" "" args.element
-      removeAttribute "class" args.element
-    _, Just n ->
-      if args.isSvg
-        then setAttribute "class" n args.element
-        else setAny "className" n args.element
-
-getClassName :: Styler -> SpecialProps -> Effect (Maybe String)
-getClassName styler specials =
-  case specials.css, specials.className of
-    Nothing, Nothing ->
-      pure Nothing
-    Nothing, Just cls ->
-      pure $ Just cls
-    Just css, Nothing ->
-      Just <$> registerStyle css styler
-    Just css, Just cls -> do
-      cls' <- registerStyle css styler
-      pure $ Just $ cls' <> " " <> cls
+attributes :: Array String
+attributes =
+  [ "style"
+  , "list"
+  , "form"
+  , "dropzone"
+  ]
