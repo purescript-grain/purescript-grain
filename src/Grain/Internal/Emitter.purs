@@ -24,7 +24,7 @@ createEmitter = do
 
 subscribe :: EFn.EffectFn2 (Effect Unit) Emitter Unit
 subscribe = EFn.mkEffectFn2 \listener (Emitter listenersRef) ->
-  modify_ (flip snoc listener) listenersRef
+  modify_ (_ `snoc` listener) listenersRef
 
 unsubscribe :: EFn.EffectFn2 (Effect Unit) Emitter Unit
 unsubscribe = EFn.mkEffectFn2 \listener (Emitter listenersRef) ->
