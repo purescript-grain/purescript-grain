@@ -32,7 +32,9 @@ type Part =
   }
 
 createStore :: Effect Store
-createStore = Store <$> MM.new
+createStore = do
+  m <- MM.new
+  pure $ Store m
 
 readGrain
   :: forall p a

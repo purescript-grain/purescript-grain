@@ -389,8 +389,9 @@ eval :: EFn.EffectFn4 UIContext (Maybe Node) (Maybe VElement) (Maybe VElement) N
 eval = EFn.mkEffectFn4 \context target current next -> do
   case target, current, next of
     -- Create
-    Nothing, Nothing, Just (VText nt) ->
-      EFn.runEffectFn1 createTextNode nt <#> T.toNode
+    Nothing, Nothing, Just (VText nt) -> do
+      txt <- EFn.runEffectFn1 createTextNode nt
+      pure $ T.toNode txt
     Nothing, Nothing, Just (VComponent nc) -> do
       componentRef <- newComponentRef
       node <- EFn.runEffectFn4 evalComponent context Nothing nc.render componentRef

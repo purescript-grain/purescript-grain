@@ -28,8 +28,9 @@ foreign import unsafeSize :: forall a. MObject a -> Int
 foreign import has :: forall a. EFn.EffectFn2 String (MObject a) Boolean
 
 get ::  forall a. EFn.EffectFn2 String (MObject a) (Maybe a)
-get = EFn.mkEffectFn2 \k o ->
-  toMaybe <$> EFn.runEffectFn2 getImpl k o
+get = EFn.mkEffectFn2 \k o -> do
+  nullable <- EFn.runEffectFn2 getImpl k o
+  pure $ toMaybe nullable
 
 foreign import getImpl :: forall a. EFn.EffectFn2 String (MObject a) (Nullable a)
 foreign import set :: forall a. EFn.EffectFn3 String a (MObject a) Unit

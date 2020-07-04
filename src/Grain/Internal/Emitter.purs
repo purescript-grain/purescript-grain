@@ -18,7 +18,9 @@ import Unsafe.Reference (unsafeRefEq)
 newtype Emitter = Emitter (Ref (Array (Effect Unit)))
 
 createEmitter :: Effect Emitter
-createEmitter = Emitter <$> new []
+createEmitter = do
+  listenersRef <- new []
+  pure $ Emitter listenersRef
 
 subscribe :: EFn.EffectFn2 (Effect Unit) Emitter Unit
 subscribe = EFn.mkEffectFn2 \listener (Emitter listenersRef) ->
