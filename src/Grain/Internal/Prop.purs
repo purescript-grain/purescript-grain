@@ -45,30 +45,21 @@ patch isSvg element = EFn.mkEffectFn1 \act ->
 
 setProp :: EFn.EffectFn4 Boolean String String Element Unit
 setProp = EFn.mkEffectFn4 \isSvg name val element ->
-  if isAttribute name
-    then
-      EFn.runEffectFn3 setAttribute name val element
+  if isSvg || shouldAttribute name || not (Fn.runFn2 isProperty name element)
+    then EFn.runEffectFn3 setAttribute name val element
     else
-      if Fn.runFn2 isProperty name element && not isSvg
-        then
-          if Fn.runFn2 isBoolean name element
-            then EFn.runEffectFn3 setAny name (val /= "false") element
-            else EFn.runEffectFn3 setAny name val element
-        else
-          EFn.runEffectFn3 setAttribute name val element
+      if Fn.runFn2 isBoolean name element
+        then EFn.runEffectFn3 setAny name (val /= "false") element
+        else EFn.runEffectFn3 setAny name val element
 
 removeProp :: EFn.EffectFn3 Boolean String Element Unit
 removeProp = EFn.mkEffectFn3 \isSvg name element ->
-  if isAttribute name
-    then
-      EFn.runEffectFn2 removeAttribute name element
-    else do
-      EFn.runEffectFn2 whenE (Fn.runFn2 isProperty name element && not isSvg) do
-        EFn.runEffectFn3 setAny name "" element
-      EFn.runEffectFn2 removeAttribute name element
+  if isSvg || shouldAttribute name || not (Fn.runFn2 isProperty name element)
+    then EFn.runEffectFn2 removeAttribute name element
+    else EFn.runEffectFn3 setAny name "" element
 
-isAttribute :: String -> Boolean
-isAttribute name =
+shouldAttribute :: String -> Boolean
+shouldAttribute name =
   isJust $ elemIndex name attributes
 
 attributes :: Array String

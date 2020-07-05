@@ -36,9 +36,10 @@ updateSpecialProps = EFn.mkEffectFn5 \isSvg styler currents nexts element -> do
   case mc, mn of
     Nothing, Nothing ->
       pure unit
-    Just _, Nothing -> do
-      EFn.runEffectFn2 whenE (not isSvg) (EFn.runEffectFn3 setAny "className" "" element)
-      EFn.runEffectFn2 removeAttribute "class" element
+    Just _, Nothing ->
+      if isSvg
+        then EFn.runEffectFn2 removeAttribute "class" element
+        else EFn.runEffectFn3 setAny "className" "" element
     Nothing, Just val ->
       EFn.runEffectFn3 setClassName isSvg val element
     Just c, Just n ->
