@@ -4,8 +4,10 @@ import Prelude
 
 import Effect (Effect)
 import Test.UI.Diff (testDiff)
+import Test.UI.PropDiff (testPropDiff)
 import Test.Unit.Main (runTest)
 
 main :: Effect Unit
 main = runTest do
   testDiff
+  testPropDiff
