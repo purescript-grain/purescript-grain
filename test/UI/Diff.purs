@@ -2,8 +2,8 @@ module Test.UI.Diff where
 
 import Prelude
 
-import Control.Safely as Safe
 import Data.Array (delete, insertAt)
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
@@ -21,7 +21,7 @@ testDiff = suite "Diff" do
     Assert.equal "element_span_key1" $ getKey 1 $ H.key "key1" $ H.span
     Assert.equal "component_key2" $ getKey 2 $ H.key "key2" $ H.component $ pure H.span
   suite "diff" do
-    Safe.for_ targetLists \targetList ->
+    for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
         liftEffect $ EFn.runEffectFn2 diff patch

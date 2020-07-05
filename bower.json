@@ -14,8 +14,6 @@
         "output"
     ],
     "dependencies": {
-        "purescript-foreign-object": "^v2.0.3",
-        "purescript-safely": "^v4.0.1",
         "purescript-unsafe-reference": "^v3.0.1",
         "purescript-web-html": "^v2.3.0"
     }
