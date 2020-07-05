@@ -8,6 +8,7 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 import Effect.Uncurried as EFn
+import Grain.Internal.Effect (whenE)
 import Grain.Internal.Styler (Styler, registerStyle)
 import Grain.Internal.Util (removeAttribute, setAny, setAttribute)
 import Web.DOM.Element (Element)
@@ -36,12 +37,12 @@ updateSpecialProps = EFn.mkEffectFn5 \isSvg styler currents nexts element -> do
     Nothing, Nothing ->
       pure unit
     Just _, Nothing -> do
-      when (not isSvg) (EFn.runEffectFn3 setAny "className" "" element)
+      EFn.runEffectFn2 whenE (not isSvg) (EFn.runEffectFn3 setAny "className" "" element)
       EFn.runEffectFn2 removeAttribute "class" element
     Nothing, Just val ->
       EFn.runEffectFn3 setClassName isSvg val element
     Just c, Just n ->
-      when (c /= n) (EFn.runEffectFn3 setClassName isSvg n element)
+      EFn.runEffectFn2 whenE (c /= n) (EFn.runEffectFn3 setClassName isSvg n element)
 
 setClassName :: EFn.EffectFn3 Boolean String Element Unit
 setClassName = EFn.mkEffectFn3 \isSvg val element ->

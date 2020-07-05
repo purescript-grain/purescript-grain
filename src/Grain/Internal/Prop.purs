@@ -11,7 +11,7 @@ import Data.Function.Uncurried as Fn
 import Data.Maybe (isJust)
 import Data.Tuple (Tuple(..))
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (foreachE)
+import Grain.Internal.Effect (foreachE, whenE)
 import Grain.Internal.PropDiff (PatchArgs(..), diff)
 import Grain.Internal.Util (isBoolean, isProperty, removeAttribute, setAny, setAttribute)
 import Web.DOM.Element (Element)
@@ -41,7 +41,7 @@ patch isSvg element = EFn.mkEffectFn1 \act ->
     Delete { current: Tuple name _ } ->
       EFn.runEffectFn3 removeProp isSvg name element
     Update { current: Tuple _ c, next: Tuple name n } ->
-      when (c /= n) (EFn.runEffectFn4 setProp isSvg name n element)
+      EFn.runEffectFn2 whenE (c /= n) (EFn.runEffectFn4 setProp isSvg name n element)
 
 setProp :: EFn.EffectFn4 Boolean String String Element Unit
 setProp = EFn.mkEffectFn4 \isSvg name val element ->
@@ -63,7 +63,7 @@ removeProp = EFn.mkEffectFn3 \isSvg name element ->
     then
       EFn.runEffectFn2 removeAttribute name element
     else do
-      when (Fn.runFn2 isProperty name element && not isSvg) do
+      EFn.runEffectFn2 whenE (Fn.runFn2 isProperty name element && not isSvg) do
         EFn.runEffectFn3 setAny name "" element
       EFn.runEffectFn2 removeAttribute name element
 

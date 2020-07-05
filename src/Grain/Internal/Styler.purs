@@ -18,6 +18,7 @@ import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
 import Effect.Uncurried as EFn
+import Grain.Internal.Effect (whenE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
 import Grain.Internal.Util (appendChild, createElement, head, setTextContent)
@@ -40,7 +41,7 @@ registerStyle = EFn.mkEffectFn2 \style (Styler s) -> do
   let minified = minify style
       name = "g" <> generateHash minified
   exists <- EFn.runEffectFn2 MO.has name s.stylesRef
-  unless exists do
+  EFn.runEffectFn2 whenE (not exists) do
     let output = Fn.runFn2 replaceToken name minified
     EFn.runEffectFn3 MO.set name output s.stylesRef
     vs <- EFn.runEffectFn1 MO.values s.stylesRef

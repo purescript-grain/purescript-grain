@@ -39,7 +39,7 @@ import Effect.Ref as Ref
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, which)
 import Grain.Internal.Diff (class HasKey, PatchArgs(..), diff)
-import Grain.Internal.Effect (sequenceE)
+import Grain.Internal.Effect (sequenceE, whenE)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
 import Grain.Internal.MMap (MMap)
@@ -368,7 +368,7 @@ patch = EFn.mkEffectFn1 \args ->
       let ctx = switchToDeleting context
       target <- EFn.runEffectFn3 getChildNode parentNode nodeKey ctx.nodeRefs
       node <- EFn.runEffectFn4 eval ctx target (Just current') Nothing
-      when (not context.deleting) do
+      EFn.runEffectFn2 whenE (not context.deleting) do
         EFn.runEffectFn3 unregisterChildNode parentNode nodeKey ctx.nodeRefs
         EFn.runEffectFn2 removeChild node parentNode
 
@@ -432,16 +432,16 @@ eval = EFn.mkEffectFn4 \context target current next -> do
 
     -- Update
     Just node, Just (VText ct), Just (VText nt) -> do
-      when (ct /= nt) do
+      EFn.runEffectFn2 whenE (ct /= nt) do
         EFn.runEffectFn2 setTextContent nt node
       pure node
     Just node, Just (VComponent cc), Just (VComponent nc) -> do
-      when (Fn.runFn2 isDifferent cc nc) do
+      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cc nc) do
         componentRef <- EFn.runEffectFn2 MM.unsafeGet node context.componentRefs
         void $ EFn.runEffectFn4 evalComponent context (Just node) nc.render componentRef
       pure node
     Just node, Just (VElement cv), Just (VElement nv) -> do
-      when (Fn.runFn2 isDifferent cv nv) do
+      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cv nv) do
         let el = unsafeCoerce node
             ctx = Fn.runFn2 switchToSvg nv.tagName context
         EFn.runEffectFn5 updateElement ctx.isSvg ctx.styler cv nv el
@@ -535,7 +535,7 @@ evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
 
       evaluateRaf = do
         locked <- EFn.runEffectFn1 componentRenderingLock componentRef
-        when (not locked) do
+        EFn.runEffectFn2 whenE (not locked) do
           EFn.runEffectFn1 lockRendering componentRef
           EFn.runEffectFn1 raf (void evaluate)
 

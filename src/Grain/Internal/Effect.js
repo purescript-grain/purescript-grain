@@ -1,5 +1,11 @@
 'use strict';
 
+exports.whenE = function(bool, f) {
+  if (bool) {
+    f();
+  }
+}
+
 exports.forE = function(lo, hi, f) {
   var i = lo;
 
