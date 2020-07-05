@@ -5,11 +5,11 @@ import Prelude
 import Control.Safely as Safe
 import Data.Array (delete, insertAt)
 import Data.Maybe (Maybe(..))
-import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
+import Effect.Uncurried as EFn
+import Grain.Internal.Diff (PatchArgs(..), diff, getKey)
 import Grain.Markup as H
-import Grain.UI.Diff (PatchArgs(..), diff, getKey)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 
@@ -24,7 +24,7 @@ testDiff = suite "Diff" do
     Safe.for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
-        liftEffect $ diff patch
+        liftEffect $ EFn.runEffectFn2 diff patch
           { context: unit
           , parentNode: ref
           , currents: startingList
@@ -34,7 +34,7 @@ testDiff = suite "Diff" do
         Assert.equal targetList sourceList
     test ("[] -> " <> show startingList) do
       ref <- liftEffect $ new []
-      liftEffect $ diff patch
+      liftEffect $ EFn.runEffectFn2 diff patch
         { context: unit
         , parentNode: ref
         , currents: []
@@ -131,17 +131,23 @@ targetLists =
   , [ 100, 101, 102, 0, 1, 2, 3000, 500, 34, 23 ]
   ]
 
-patch :: PatchArgs Unit (Ref (Array Int)) Int -> Effect Unit
-patch (Create { parentNode, index, next }) = do
-  list <- read parentNode
-  case insertAt index next list of
-    Nothing -> pure unit
-    Just list' -> write list' parentNode
-patch (Delete { parentNode, current }) = do
-  modify_ (delete current) parentNode
-patch (Move { parentNode, index, current, next }) = do
-  list <- modify (delete current) parentNode
-  case insertAt index next list of
-    Nothing -> pure unit
-    Just list' -> write list' parentNode
-patch _ = pure unit
+patch :: EFn.EffectFn1 (PatchArgs Unit (Ref (Array Int)) Int) Unit
+patch = EFn.mkEffectFn1 \act ->
+  case act of
+    Create { parentNode, index, next } -> do
+      list <- read parentNode
+      case insertAt index next list of
+        Nothing -> pure unit
+        Just list' -> write list' parentNode
+
+    Delete { parentNode, current } ->
+      modify_ (delete current) parentNode
+
+    Move { parentNode, index, current, next } -> do
+      list <- modify (delete current) parentNode
+      case insertAt index next list of
+        Nothing -> pure unit
+        Just list' -> write list' parentNode
+
+    _ ->
+      pure unit

@@ -5,14 +5,12 @@ module Grain.Internal.PropDiff
 
 import Prelude
 
-import Control.Monad.Rec.Class (Step(..), tailRecM)
 import Data.Array (length, (!!))
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple, fst)
-import Effect (Effect)
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (forE, foreachE)
+import Grain.Internal.Effect (forE, foreachE, tailRecE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
 import Grain.Internal.Util (byIdx, just)
@@ -55,8 +53,9 @@ diff = EFn.mkEffectFn2 \patch args@{ currents, nexts } -> do
         let current = Fn.runFn2 byIdx currents i
         EFn.runEffectFn1 patch $ Delete { current }
     _, _ -> do
-      args1 <- tailRecM diff1
-        { patch
+      args1 <- EFn.runEffectFn2 tailRecE diff1
+        { done: false
+        , patch
         , args
         , st:
             { startC: 0
@@ -66,8 +65,9 @@ diff = EFn.mkEffectFn2 \patch args@{ currents, nexts } -> do
             }
         }
       ntoi <- EFn.runEffectFn1 nameToIdx args1
-      tailRecM diff2
-        { patch
+      void $ EFn.runEffectFn2 tailRecE diff2
+        { done: false
+        , patch
         , args
         , st:
             { startN: args1.st.startN
@@ -84,82 +84,80 @@ type Diff1State =
   }
 
 type Diff1Args a =
-  { patch :: Patch a
+  { done :: Boolean
+  , patch :: Patch a
   , args :: DiffArgs a
   , st :: Diff1State
   }
 
-diff1
-  :: forall a
-   . Diff1Args a
-  -> Effect (Step (Diff1Args a) (Diff1Args a))
-diff1 args1@{ patch, args, st }
-  | st.startC > st.endC =
-      pure $ Done args1
-  | st.startN > st.endN =
-      pure $ Done args1
-  | otherwise = do
-      let tupleStartC = args.currents !! st.startC
-          tupleEndC = args.currents !! st.endC
-          tupleStartN = args.nexts !! st.startN
-          tupleEndN = args.nexts !! st.endN
+diff1 :: forall a. EFn.EffectFn1 (Diff1Args a) (Diff1Args a)
+diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
+  if st.startC > st.endC then
+    pure args1 { done = true }
+  else if st.startN > st.endN then
+    pure args1 { done = true }
+  else do
+    let tupleStartC = args.currents !! st.startC
+        tupleEndC = args.currents !! st.endC
+        tupleStartN = args.nexts !! st.startN
+        tupleEndN = args.nexts !! st.endN
 
-          nameStartC = fst <$> tupleStartC
-          nameEndC = fst <$> tupleEndC
-          nameStartN = fst <$> tupleStartN
-          nameEndN = fst <$> tupleEndN
+        nameStartC = fst <$> tupleStartC
+        nameEndC = fst <$> tupleEndC
+        nameStartN = fst <$> tupleStartN
+        nameEndN = fst <$> tupleEndN
 
-          eqStart = Fn.runFn2 eqName nameStartC nameStartN
-          eqEnd = Fn.runFn2 eqName nameEndC nameEndN
-          eqStartEnd = Fn.runFn2 eqName nameStartC nameEndN
-          eqEndStart = Fn.runFn2 eqName nameEndC nameStartN
+        eqStart = Fn.runFn2 eqName nameStartC nameStartN
+        eqEnd = Fn.runFn2 eqName nameEndC nameEndN
+        eqStartEnd = Fn.runFn2 eqName nameStartC nameEndN
+        eqEndStart = Fn.runFn2 eqName nameEndC nameStartN
 
-      if eqStart then do
-        EFn.runEffectFn1 patch $ Update
-          { current: just tupleStartC
-          , next: just tupleStartN
-          }
-        pure $ Loop args1
-          { st = st
-              { startC = st.startC + 1
-              , startN = st.startN + 1
-              }
-          }
-      else if eqEnd then do
-        EFn.runEffectFn1 patch $ Update
-          { current: just tupleEndC
-          , next: just tupleEndN
-          }
-        pure $ Loop args1
-          { st = st
-              { endC = st.endC - 1
-              , endN = st.endN - 1
-              }
-          }
-      else if eqStartEnd then do
-        EFn.runEffectFn1 patch $ Update
-          { current: just tupleStartC
-          , next: just tupleEndN
-          }
-        pure $ Loop args1
-          { st = st
-              { startC = st.startC + 1
-              , endN = st.endN - 1
-              }
-          }
-      else if eqEndStart then do
-        EFn.runEffectFn1 patch $ Update
-          { current: just tupleEndC
-          , next: just tupleStartN
-          }
-        pure $ Loop args1
-          { st = st
-              { endC = st.endC - 1
-              , startN = st.startN + 1
-              }
-          }
-      else
-        pure $ Done args1
+    if eqStart then do
+      EFn.runEffectFn1 patch $ Update
+        { current: just tupleStartC
+        , next: just tupleStartN
+        }
+      pure args1
+        { st = st
+            { startC = st.startC + 1
+            , startN = st.startN + 1
+            }
+        }
+    else if eqEnd then do
+      EFn.runEffectFn1 patch $ Update
+        { current: just tupleEndC
+        , next: just tupleEndN
+        }
+      pure args1
+        { st = st
+            { endC = st.endC - 1
+            , endN = st.endN - 1
+            }
+        }
+    else if eqStartEnd then do
+      EFn.runEffectFn1 patch $ Update
+        { current: just tupleStartC
+        , next: just tupleEndN
+        }
+      pure args1
+        { st = st
+            { startC = st.startC + 1
+            , endN = st.endN - 1
+            }
+        }
+    else if eqEndStart then do
+      EFn.runEffectFn1 patch $ Update
+        { current: just tupleEndC
+        , next: just tupleStartN
+        }
+      pure args1
+        { st = st
+            { endC = st.endC - 1
+            , startN = st.startN + 1
+            }
+        }
+    else
+      pure args1 { done = true }
 
 type Diff2State =
   { startN :: Int
@@ -168,47 +166,45 @@ type Diff2State =
   }
 
 type Diff2Args a =
-  { patch :: Patch a
+  { done :: Boolean
+  , patch :: Patch a
   , args :: DiffArgs a
   , st :: Diff2State
   }
 
-diff2
-  :: forall a
-   . Diff2Args a
-  -> Effect (Step (Diff2Args a) Unit)
-diff2 args2@{ patch, args, st }
-  | st.startN <= st.endN = do
-      let tupleN = Fn.runFn2 byIdx args.nexts st.startN
-          nameN = fst tupleN
-      mIdxC <- EFn.runEffectFn2 MO.get nameN st.ntoi
-      case mIdxC of
-        Nothing -> do
-          EFn.runEffectFn1 patch $ Create { next: tupleN }
-          pure $ Loop args2
-            { st = st
-                { startN = st.startN + 1
-                }
-            }
-        Just idxC -> do
-          let tupleC = Fn.runFn2 byIdx args.currents idxC
-          EFn.runEffectFn1 patch $ Update
-            { current: tupleC
-            , next: tupleN
-            }
-          EFn.runEffectFn2 MO.del nameN st.ntoi
-          pure $ Loop args2
-            { st = st { startN = st.startN + 1 }
-            }
-  | MO.unsafeSize st.ntoi > 0 = do
-      ns <- EFn.runEffectFn1 MO.keys st.ntoi
-      EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
-        idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
+diff2 :: forall a. EFn.EffectFn1 (Diff2Args a) (Diff2Args a)
+diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
+  if st.startN <= st.endN then do
+    let tupleN = Fn.runFn2 byIdx args.nexts st.startN
+        nameN = fst tupleN
+    mIdxC <- EFn.runEffectFn2 MO.get nameN st.ntoi
+    case mIdxC of
+      Nothing -> do
+        EFn.runEffectFn1 patch $ Create { next: tupleN }
+        pure args2
+          { st = st
+              { startN = st.startN + 1
+              }
+          }
+      Just idxC -> do
         let tupleC = Fn.runFn2 byIdx args.currents idxC
-        EFn.runEffectFn1 patch $ Delete { current: tupleC }
-      pure $ Done unit
-  | otherwise =
-      pure $ Done unit
+        EFn.runEffectFn1 patch $ Update
+          { current: tupleC
+          , next: tupleN
+          }
+        EFn.runEffectFn2 MO.del nameN st.ntoi
+        pure args2
+          { st = st { startN = st.startN + 1 }
+          }
+  else if MO.unsafeSize st.ntoi > 0 then do
+    ns <- EFn.runEffectFn1 MO.keys st.ntoi
+    EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
+      idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
+      let tupleC = Fn.runFn2 byIdx args.currents idxC
+      EFn.runEffectFn1 patch $ Delete { current: tupleC }
+    pure args2 { done = true }
+  else
+    pure args2 { done = true }
 
 nameToIdx
   :: forall a

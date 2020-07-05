@@ -7,13 +7,11 @@ module Grain.Internal.Diff
 
 import Prelude
 
-import Control.Monad.Rec.Class (Step(..), tailRecM)
 import Data.Array (length, (!!))
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
-import Effect (Effect)
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (forE, foreachE)
+import Grain.Internal.Effect (forE, foreachE, tailRecE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
 import Grain.Internal.Util (byIdx, just)
@@ -96,8 +94,9 @@ diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> d
           , current
           }
     _, _ -> do
-      args1 <- tailRecM diff1
-        { patch
+      args1 <- EFn.runEffectFn2 tailRecE diff1
+        { done: false
+        , patch
         , args
         , st:
             { lengthC
@@ -109,8 +108,9 @@ diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> d
             }
         }
       ktoi <- EFn.runEffectFn1 keyToIdx args1
-      tailRecM diff2
-        { patch
+      void $ EFn.runEffectFn2 tailRecE diff2
+        { done: false
+        , patch
         , args
         , st:
             { startN: args1.st.startN
@@ -129,99 +129,96 @@ type Diff1State =
   }
 
 type Diff1Args ctx p c =
-  { patch :: Patch ctx p c
+  { done :: Boolean
+  , patch :: Patch ctx p c
   , args :: DiffArgs ctx p c
   , st :: Diff1State
   }
 
-diff1
-  :: forall ctx p c
-   . HasKey c
-  => Diff1Args ctx p c
-  -> Effect (Step (Diff1Args ctx p c) (Diff1Args ctx p c))
-diff1 args1@{ patch, args, st }
-  | st.startC > st.endC =
-      pure $ Done args1
-  | st.startN > st.endN =
-      pure $ Done args1
-  | otherwise = do
-      let vnodeStartC = args.currents !! st.startC
-          vnodeEndC = args.currents !! st.endC
-          vnodeStartN = args.nexts !! st.startN
-          vnodeEndN = args.nexts !! st.endN
+diff1 :: forall ctx p c. HasKey c => EFn.EffectFn1 (Diff1Args ctx p c) (Diff1Args ctx p c)
+diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
+  if st.startC > st.endC then
+    pure args1 { done = true }
+  else if st.startN > st.endN then
+    pure args1 { done = true }
+  else do
+    let vnodeStartC = args.currents !! st.startC
+        vnodeEndC = args.currents !! st.endC
+        vnodeStartN = args.nexts !! st.startN
+        vnodeEndN = args.nexts !! st.endN
 
-          keyStartC = getKey st.startC <$> vnodeStartC
-          keyEndC = getKey st.endC <$> vnodeEndC
-          keyStartN = getKey st.startN <$> vnodeStartN
-          keyEndN = getKey st.endN <$> vnodeEndN
+        keyStartC = getKey st.startC <$> vnodeStartC
+        keyEndC = getKey st.endC <$> vnodeEndC
+        keyStartN = getKey st.startN <$> vnodeStartN
+        keyEndN = getKey st.endN <$> vnodeEndN
 
-          eqStart = Fn.runFn2 eqKey keyStartC keyStartN
-          eqEnd = Fn.runFn2 eqKey keyEndC keyEndN
-          eqStartEnd = Fn.runFn2 eqKey keyStartC keyEndN
-          eqEndStart = Fn.runFn2 eqKey keyEndC keyStartN
+        eqStart = Fn.runFn2 eqKey keyStartC keyStartN
+        eqEnd = Fn.runFn2 eqKey keyEndC keyEndN
+        eqStartEnd = Fn.runFn2 eqKey keyStartC keyEndN
+        eqEndStart = Fn.runFn2 eqKey keyEndC keyStartN
 
-      if eqStart then do
-        EFn.runEffectFn1 patch $ Update
-          { context: args.context
-          , parentNode: args.parentNode
-          , nodeKey: just keyStartN
-          , current: just vnodeStartC
-          , next: just vnodeStartN
-          }
-        pure $ Loop args1
-          { st = st
-              { startC = st.startC + 1
-              , startN = st.startN + 1
-              }
-          }
-      else if eqEnd then do
-        EFn.runEffectFn1 patch $ Update
-          { context: args.context
-          , parentNode: args.parentNode
-          , nodeKey: just keyEndN
-          , current: just vnodeEndC
-          , next: just vnodeEndN
-          }
-        pure $ Loop args1
-          { st = st
-              { endC = st.endC - 1
-              , endN = st.endN - 1
-              }
-          }
-      else if eqStartEnd then do
-        let delta = st.lengthN - 1 - st.endN
-            index = st.lengthC - 1 - delta
-        EFn.runEffectFn1 patch $ Move
-          { context: args.context
-          , parentNode: args.parentNode
-          , nodeKey: just keyEndN
-          , index
-          , current: just vnodeStartC
-          , next: just vnodeEndN
-          }
-        pure $ Loop args1
-          { st = st
-              { startC = st.startC + 1
-              , endN = st.endN - 1
-              }
-          }
-      else if eqEndStart then do
-        EFn.runEffectFn1 patch $ Move
-          { context: args.context
-          , parentNode: args.parentNode
-          , nodeKey: just keyStartN
-          , index: st.startN
-          , current: just vnodeEndC
-          , next: just vnodeStartN
-          }
-        pure $ Loop args1
-          { st = st
-              { endC = st.endC - 1
-              , startN = st.startN + 1
-              }
-          }
-      else
-        pure $ Done args1
+    if eqStart then do
+      EFn.runEffectFn1 patch $ Update
+        { context: args.context
+        , parentNode: args.parentNode
+        , nodeKey: just keyStartN
+        , current: just vnodeStartC
+        , next: just vnodeStartN
+        }
+      pure args1
+        { st = st
+            { startC = st.startC + 1
+            , startN = st.startN + 1
+            }
+        }
+    else if eqEnd then do
+      EFn.runEffectFn1 patch $ Update
+        { context: args.context
+        , parentNode: args.parentNode
+        , nodeKey: just keyEndN
+        , current: just vnodeEndC
+        , next: just vnodeEndN
+        }
+      pure args1
+        { st = st
+            { endC = st.endC - 1
+            , endN = st.endN - 1
+            }
+        }
+    else if eqStartEnd then do
+      let delta = st.lengthN - 1 - st.endN
+          index = st.lengthC - 1 - delta
+      EFn.runEffectFn1 patch $ Move
+        { context: args.context
+        , parentNode: args.parentNode
+        , nodeKey: just keyEndN
+        , index
+        , current: just vnodeStartC
+        , next: just vnodeEndN
+        }
+      pure args1
+        { st = st
+            { startC = st.startC + 1
+            , endN = st.endN - 1
+            }
+        }
+    else if eqEndStart then do
+      EFn.runEffectFn1 patch $ Move
+        { context: args.context
+        , parentNode: args.parentNode
+        , nodeKey: just keyStartN
+        , index: st.startN
+        , current: just vnodeEndC
+        , next: just vnodeStartN
+        }
+      pure args1
+        { st = st
+            { endC = st.endC - 1
+            , startN = st.startN + 1
+            }
+        }
+    else
+      pure args1 { done = true }
 
 type Diff2State =
   { startN :: Int
@@ -230,63 +227,60 @@ type Diff2State =
   }
 
 type Diff2Args ctx p c =
-  { patch :: Patch ctx p c
+  { done :: Boolean
+  , patch :: Patch ctx p c
   , args :: DiffArgs ctx p c
   , st :: Diff2State
   }
 
-diff2
-  :: forall ctx p c
-   . HasKey c
-  => Diff2Args ctx p c
-  -> Effect (Step (Diff2Args ctx p c) Unit)
-diff2 args2@{ patch, args, st }
-  | st.startN <= st.endN = do
-      let vnodeN = Fn.runFn2 byIdx args.nexts st.startN
-          keyN = getKey st.startN vnodeN
-      mIdxC <- EFn.runEffectFn2 MO.get keyN st.ktoi
-      case mIdxC of
-        Nothing -> do
-          EFn.runEffectFn1 patch $ Create
-            { context: args.context
-            , parentNode: args.parentNode
-            , nodeKey: keyN
-            , index: st.startN
-            , next: vnodeN
-            }
-          pure $ Loop args2
-            { st = st
-                { startN = st.startN + 1
-                }
-            }
-        Just idxC -> do
-          let vnodeC = Fn.runFn2 byIdx args.currents idxC
-          EFn.runEffectFn1 patch $ Move
-            { context: args.context
-            , parentNode: args.parentNode
-            , nodeKey: keyN
-            , index: st.startN
-            , current: vnodeC
-            , next: vnodeN
-            }
-          EFn.runEffectFn2 MO.del keyN st.ktoi
-          pure $ Loop args2
-            { st = st { startN = st.startN + 1 }
-            }
-  | MO.unsafeSize st.ktoi > 0 = do
-      ks <- EFn.runEffectFn1 MO.keys st.ktoi
-      EFn.runEffectFn2 foreachE ks $ EFn.mkEffectFn1 \keyC -> do
-        idxC <- EFn.runEffectFn2 MO.unsafeGet keyC st.ktoi
-        let vnodeC = Fn.runFn2 byIdx args.currents idxC
-        EFn.runEffectFn1 patch $ Delete
+diff2 :: forall ctx p c. HasKey c => EFn.EffectFn1 (Diff2Args ctx p c) (Diff2Args ctx p c)
+diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
+  if st.startN <= st.endN then do
+    let vnodeN = Fn.runFn2 byIdx args.nexts st.startN
+        keyN = getKey st.startN vnodeN
+    mIdxC <- EFn.runEffectFn2 MO.get keyN st.ktoi
+    case mIdxC of
+      Nothing -> do
+        EFn.runEffectFn1 patch $ Create
           { context: args.context
           , parentNode: args.parentNode
-          , nodeKey: keyC
-          , current: vnodeC
+          , nodeKey: keyN
+          , index: st.startN
+          , next: vnodeN
           }
-      pure $ Done unit
-  | otherwise =
-      pure $ Done unit
+        pure args2
+          { st = st
+              { startN = st.startN + 1
+              }
+          }
+      Just idxC -> do
+        let vnodeC = Fn.runFn2 byIdx args.currents idxC
+        EFn.runEffectFn1 patch $ Move
+          { context: args.context
+          , parentNode: args.parentNode
+          , nodeKey: keyN
+          , index: st.startN
+          , current: vnodeC
+          , next: vnodeN
+          }
+        EFn.runEffectFn2 MO.del keyN st.ktoi
+        pure args2
+          { st = st { startN = st.startN + 1 }
+          }
+  else if MO.unsafeSize st.ktoi > 0 then do
+    ks <- EFn.runEffectFn1 MO.keys st.ktoi
+    EFn.runEffectFn2 foreachE ks $ EFn.mkEffectFn1 \keyC -> do
+      idxC <- EFn.runEffectFn2 MO.unsafeGet keyC st.ktoi
+      let vnodeC = Fn.runFn2 byIdx args.currents idxC
+      EFn.runEffectFn1 patch $ Delete
+        { context: args.context
+        , parentNode: args.parentNode
+        , nodeKey: keyC
+        , current: vnodeC
+        }
+    pure args2 { done = true }
+  else
+    pure args2 { done = true }
 
 keyToIdx
   :: forall ctx p c

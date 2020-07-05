@@ -32,3 +32,11 @@ exports.sequenceE = function(fs) {
     i = (i + 1) | 0;
   }
 }
+
+exports.tailRecE = function(f, s) {
+  var step = s;
+  while (!step.done) {
+    step = f(step);
+  }
+  return step;
+}
