@@ -11,8 +11,6 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Ref (Ref)
-import Effect.Ref as Ref
 import Effect.Uncurried as EFn
 import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Grain.Class (class Grain, initialState, keyOf, typeRefOf)
@@ -21,6 +19,8 @@ import Grain.Internal.MMap (MMap)
 import Grain.Internal.MMap as MM
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
+import Grain.Internal.Ref (Ref)
+import Grain.Internal.Ref as Ref
 import Grain.TypeRef (TypeRef)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -42,7 +42,7 @@ readGrain
   => EFn.EffectFn2 (p a) Store a
 readGrain = EFn.mkEffectFn2 \proxy store -> do
   { valueRef } <- EFn.runEffectFn2 lookupPart proxy store
-  value <- Ref.read valueRef
+  value <- EFn.runEffectFn1 Ref.read valueRef
   pure $ unsafeFromForeign value
 
 subscribeGrain
@@ -67,7 +67,7 @@ updateGrain
   => EFn.EffectFn3 (p a) (a -> a) Store Unit
 updateGrain = EFn.mkEffectFn3 \proxy f store -> do
   { emitter, valueRef } <- EFn.runEffectFn2 lookupPart proxy store
-  Ref.modify_ (unsafeCoerce f) valueRef
+  EFn.runEffectFn2 Ref.modify_ (unsafeCoerce f) valueRef
   EFn.runEffectFn1 emit emitter
 
 lookupPart
@@ -81,7 +81,7 @@ lookupPart = EFn.mkEffectFn2 \proxy store -> do
     Just part -> pure part
     Nothing -> do
       value <- initialState proxy
-      valueRef <- Ref.new $ unsafeToForeign value
+      valueRef <- EFn.runEffectFn1 Ref.new $ unsafeToForeign value
       emitter <- createEmitter
       let part = { emitter, valueRef }
       EFn.runEffectFn3 MO.set (keyOf proxy) part partsRef

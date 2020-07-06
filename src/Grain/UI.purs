@@ -34,8 +34,6 @@ import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
-import Effect.Ref (Ref)
-import Effect.Ref as Ref
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, which)
 import Grain.Internal.Diff (class HasKey, PatchArgs(..), diff)
@@ -46,6 +44,8 @@ import Grain.Internal.MMap as MM
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
 import Grain.Internal.Prop (Props)
+import Grain.Internal.Ref (Ref)
+import Grain.Internal.Ref as Ref
 import Grain.Internal.SpecialProp (SpecialProps)
 import Grain.Internal.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Internal.Styler (Styler, mountStyler)
@@ -481,7 +481,7 @@ type ComponentRef = Ref
 newComponentRef :: Effect ComponentRef
 newComponentRef = do
   store <- createStore
-  Ref.new
+  EFn.runEffectFn1 Ref.new
     { rendering: true
     , unsubscribers: []
     , history: []
@@ -491,7 +491,7 @@ newComponentRef = do
 
 evalComponent :: EFn.EffectFn4 UIContext (Maybe Node) (Render VNode) ComponentRef Node
 evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
-  targetRef <- Ref.new target
+  targetRef <- EFn.runEffectFn1 Ref.new target
 
   let storeSelection = do
         local <- EFn.runEffectFn1 componentStore componentRef
@@ -530,7 +530,7 @@ evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
           , portalVNode
           }
         h <- EFn.runEffectFn2 addComponentHistory velement componentRef
-        t <- Ref.read targetRef
+        t <- EFn.runEffectFn1 Ref.read targetRef
         EFn.runEffectFn4 eval context t (h !! 1) (h !! 0)
 
       evaluateRaf = do
@@ -540,7 +540,7 @@ evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
           EFn.runEffectFn1 raf (void evaluate)
 
   node <- evaluate
-  Ref.write (Just node) targetRef
+  EFn.runEffectFn2 Ref.write (Just node) targetRef
   pure node
 
 unmountComponent :: EFn.EffectFn3 UIContext (Maybe Node) ComponentRef Unit
@@ -551,43 +551,43 @@ unmountComponent = EFn.mkEffectFn3 \context target componentRef -> do
 
 lockRendering :: EFn.EffectFn1 ComponentRef Unit
 lockRendering = EFn.mkEffectFn1 \componentRef ->
-  Ref.modify_ _ { rendering = true } componentRef
+  EFn.runEffectFn2 Ref.modify_ _ { rendering = true } componentRef
 
 unlockRendering :: EFn.EffectFn1 ComponentRef Unit
 unlockRendering = EFn.mkEffectFn1 \componentRef ->
-  Ref.modify_ _ { rendering = false } componentRef
+  EFn.runEffectFn2 Ref.modify_ _ { rendering = false } componentRef
 
 addComponentUnsubscriber :: EFn.EffectFn2 (Effect Unit) ComponentRef Unit
 addComponentUnsubscriber = EFn.mkEffectFn2 \unsubscribe componentRef -> do
   let add r = r { unsubscribers = snoc r.unsubscribers unsubscribe }
-  Ref.modify_ add componentRef
+  EFn.runEffectFn2 Ref.modify_ add componentRef
 
 addComponentHistory :: EFn.EffectFn2 VElement ComponentRef (Array VElement)
 addComponentHistory = EFn.mkEffectFn2 \velement componentRef -> do
   let add r = r { history = take 2 $ velement : r.history }
-  { history } <- Ref.modify add componentRef
+  { history } <- EFn.runEffectFn2 Ref.modify add componentRef
   pure history
 
 componentRenderingLock :: EFn.EffectFn1 ComponentRef Boolean
 componentRenderingLock = EFn.mkEffectFn1 \componentRef -> do
-  { rendering } <- Ref.read componentRef
+  { rendering } <- EFn.runEffectFn1 Ref.read componentRef
   pure rendering
 
 componentHistory :: EFn.EffectFn1 ComponentRef (Array VElement)
 componentHistory = EFn.mkEffectFn1 \componentRef -> do
-  { history } <- Ref.read componentRef
+  { history } <- EFn.runEffectFn1 Ref.read componentRef
   pure history
 
 componentStore :: EFn.EffectFn1 ComponentRef Store
 componentStore = EFn.mkEffectFn1 \componentRef -> do
-  { store } <- Ref.read componentRef
+  { store } <- EFn.runEffectFn1 Ref.read componentRef
   pure store
 
 triggerUnsubscriber :: EFn.EffectFn1 ComponentRef Unit
 triggerUnsubscriber = EFn.mkEffectFn1 \componentRef -> do
-  { unsubscribers } <- Ref.read componentRef
+  { unsubscribers } <- EFn.runEffectFn1 Ref.read componentRef
   EFn.runEffectFn1 sequenceE unsubscribers
-  Ref.modify_ _ { unsubscribers = [] } componentRef
+  EFn.runEffectFn2 Ref.modify_ _ { unsubscribers = [] } componentRef
 
 getPortal :: Fn.Fn2 UIContext ComponentRef (Effect Node -> VNode -> VNode)
 getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
@@ -630,13 +630,13 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
 
 componentPortalHistory :: EFn.EffectFn1 ComponentRef (Array VNode)
 componentPortalHistory = EFn.mkEffectFn1 \componentRef -> do
-  { portalHistory } <- Ref.read componentRef
+  { portalHistory } <- EFn.runEffectFn1 Ref.read componentRef
   pure portalHistory
 
 addPortalHistory :: EFn.EffectFn2 VNode ComponentRef (Array VNode)
 addPortalHistory = EFn.mkEffectFn2 \vnode componentRef -> do
   let add r = r { portalHistory = take 2 $ vnode : r.portalHistory }
-  { portalHistory } <- Ref.modify add componentRef
+  { portalHistory } <- EFn.runEffectFn2 Ref.modify add componentRef
   pure portalHistory
 
 
