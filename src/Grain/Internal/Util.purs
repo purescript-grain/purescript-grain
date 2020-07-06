@@ -5,6 +5,7 @@ module Grain.Internal.Util
   , byIdxNullable
   , mapNullable
   , eqNullable
+  , shouldAttribute
   , raf
   , head
   , nodeIndexOf
@@ -50,6 +51,7 @@ foreign import byIdx :: forall a. Fn.Fn2 (Array a) Int a
 foreign import byIdxNullable :: forall a. Fn.Fn2 (Array a) Int (Nullable a)
 foreign import mapNullable :: forall a b. Fn.Fn2 (a -> b) (Nullable a) (Nullable b)
 foreign import eqNullable :: forall a. Fn.Fn2 (Nullable a) (Nullable a) Boolean
+foreign import shouldAttribute :: String -> Boolean
 foreign import raf :: EFn.EffectFn1 (Effect Unit) Unit
 foreign import head :: Effect Node
 foreign import createTextNode :: EFn.EffectFn1 String Text

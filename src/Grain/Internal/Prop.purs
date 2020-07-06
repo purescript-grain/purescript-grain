@@ -6,13 +6,11 @@ module Grain.Internal.Prop
 
 import Prelude
 
-import Data.Array (elemIndex)
 import Data.Function.Uncurried as Fn
-import Data.Maybe (isJust)
 import Data.Tuple (Tuple(..))
 import Effect.Uncurried as EFn
 import Grain.Internal.PropDiff (PatchArgs(..), diff)
-import Grain.Internal.Util (foreachE, isBoolean, isProperty, removeAttribute, setAny, setAttribute, whenE)
+import Grain.Internal.Util (foreachE, isBoolean, isProperty, removeAttribute, setAny, setAttribute, shouldAttribute, whenE)
 import Web.DOM.Element (Element)
 
 type Props =
@@ -56,15 +54,3 @@ removeProp = EFn.mkEffectFn3 \isSvg name element ->
   if isSvg || shouldAttribute name || not (Fn.runFn2 isProperty name element)
     then EFn.runEffectFn2 removeAttribute name element
     else EFn.runEffectFn3 setAny name "" element
-
-shouldAttribute :: String -> Boolean
-shouldAttribute name =
-  isJust $ elemIndex name attributes
-
-attributes :: Array String
-attributes =
-  [ "style"
-  , "list"
-  , "form"
-  , "dropzone"
-  ]

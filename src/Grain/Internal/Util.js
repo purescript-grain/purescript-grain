@@ -22,6 +22,12 @@ exports.eqNullable = function(a, b) {
   return a === b;
 }
 
+var readOnlyProps = { style: true, list: true, form: true, dropzone: true }
+
+exports.shouldAttribute = function(name) {
+  return readOnlyProps[name] === true;
+}
+
 exports.raf = function(f) {
   window.requestAnimationFrame(f);
 }
