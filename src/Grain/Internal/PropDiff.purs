@@ -107,12 +107,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         nameStartN = Fn.runFn2 mapNullable fst tupleStartN
         nameEndN = Fn.runFn2 mapNullable fst tupleEndN
 
-        eqStart = Fn.runFn2 eqNullable nameStartC nameStartN
-        eqEnd = Fn.runFn2 eqNullable nameEndC nameEndN
-        eqStartEnd = Fn.runFn2 eqNullable nameStartC nameEndN
-        eqEndStart = Fn.runFn2 eqNullable nameEndC nameStartN
-
-    if eqStart then do
+    if Fn.runFn2 eqNullable nameStartC nameStartN then do
       EFn.runEffectFn1 patch $ Update
         { current: nonNull tupleStartC
         , next: nonNull tupleStartN
@@ -123,7 +118,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             , startN = st.startN + 1
             }
         }
-    else if eqEnd then do
+    else if Fn.runFn2 eqNullable nameEndC nameEndN then do
       EFn.runEffectFn1 patch $ Update
         { current: nonNull tupleEndC
         , next: nonNull tupleEndN
@@ -134,7 +129,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             , endN = st.endN - 1
             }
         }
-    else if eqStartEnd then do
+    else if Fn.runFn2 eqNullable nameStartC nameEndN then do
       EFn.runEffectFn1 patch $ Update
         { current: nonNull tupleStartC
         , next: nonNull tupleEndN
@@ -145,7 +140,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             , endN = st.endN - 1
             }
         }
-    else if eqEndStart then do
+    else if Fn.runFn2 eqNullable nameEndC nameStartN then do
       EFn.runEffectFn1 patch $ Update
         { current: nonNull tupleEndC
         , next: nonNull tupleStartN

@@ -152,12 +152,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         keyStartN = Fn.runFn2 mapNullable (getKey st.startN) vnodeStartN
         keyEndN = Fn.runFn2 mapNullable (getKey st.endN) vnodeEndN
 
-        eqStart = Fn.runFn2 eqNullable keyStartC keyStartN
-        eqEnd = Fn.runFn2 eqNullable keyEndC keyEndN
-        eqStartEnd = Fn.runFn2 eqNullable keyStartC keyEndN
-        eqEndStart = Fn.runFn2 eqNullable keyEndC keyStartN
-
-    if eqStart then do
+    if Fn.runFn2 eqNullable keyStartC keyStartN then do
       EFn.runEffectFn1 patch $ Update
         { context: args.context
         , parentNode: args.parentNode
@@ -171,7 +166,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             , startN = st.startN + 1
             }
         }
-    else if eqEnd then do
+    else if Fn.runFn2 eqNullable keyEndC keyEndN then do
       EFn.runEffectFn1 patch $ Update
         { context: args.context
         , parentNode: args.parentNode
@@ -185,7 +180,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             , endN = st.endN - 1
             }
         }
-    else if eqStartEnd then do
+    else if Fn.runFn2 eqNullable keyStartC keyEndN then do
       let delta = st.lengthN - 1 - st.endN
           index = st.lengthC - 1 - delta
       EFn.runEffectFn1 patch $ Move
@@ -202,7 +197,7 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             , endN = st.endN - 1
             }
         }
-    else if eqEndStart then do
+    else if Fn.runFn2 eqNullable keyEndC keyStartN then do
       EFn.runEffectFn1 patch $ Move
         { context: args.context
         , parentNode: args.parentNode
