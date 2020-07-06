@@ -5,7 +5,7 @@ module Grain.Internal.PropDiff
 
 import Prelude
 
-import Data.Array (length, (!!))
+import Data.Array (length)
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple, fst)
@@ -13,7 +13,7 @@ import Effect.Uncurried as EFn
 import Grain.Internal.Effect (forE, foreachE, tailRecE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (byIdx, just)
+import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, mapNullable, nonNull)
 
 data PatchArgs a
   = Create
@@ -97,25 +97,25 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
   else if st.startN > st.endN then
     pure args1 { done = true }
   else do
-    let tupleStartC = args.currents !! st.startC
-        tupleEndC = args.currents !! st.endC
-        tupleStartN = args.nexts !! st.startN
-        tupleEndN = args.nexts !! st.endN
+    let tupleStartC = Fn.runFn2 byIdxNullable args.currents st.startC
+        tupleEndC = Fn.runFn2 byIdxNullable args.currents st.endC
+        tupleStartN = Fn.runFn2 byIdxNullable args.nexts st.startN
+        tupleEndN = Fn.runFn2 byIdxNullable args.nexts st.endN
 
-        nameStartC = fst <$> tupleStartC
-        nameEndC = fst <$> tupleEndC
-        nameStartN = fst <$> tupleStartN
-        nameEndN = fst <$> tupleEndN
+        nameStartC = Fn.runFn2 mapNullable fst tupleStartC
+        nameEndC = Fn.runFn2 mapNullable fst tupleEndC
+        nameStartN = Fn.runFn2 mapNullable fst tupleStartN
+        nameEndN = Fn.runFn2 mapNullable fst tupleEndN
 
-        eqStart = Fn.runFn2 eqName nameStartC nameStartN
-        eqEnd = Fn.runFn2 eqName nameEndC nameEndN
-        eqStartEnd = Fn.runFn2 eqName nameStartC nameEndN
-        eqEndStart = Fn.runFn2 eqName nameEndC nameStartN
+        eqStart = Fn.runFn2 eqNullable nameStartC nameStartN
+        eqEnd = Fn.runFn2 eqNullable nameEndC nameEndN
+        eqStartEnd = Fn.runFn2 eqNullable nameStartC nameEndN
+        eqEndStart = Fn.runFn2 eqNullable nameEndC nameStartN
 
     if eqStart then do
       EFn.runEffectFn1 patch $ Update
-        { current: just tupleStartC
-        , next: just tupleStartN
+        { current: nonNull tupleStartC
+        , next: nonNull tupleStartN
         }
       pure args1
         { st = st
@@ -125,8 +125,8 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         }
     else if eqEnd then do
       EFn.runEffectFn1 patch $ Update
-        { current: just tupleEndC
-        , next: just tupleEndN
+        { current: nonNull tupleEndC
+        , next: nonNull tupleEndN
         }
       pure args1
         { st = st
@@ -136,8 +136,8 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         }
     else if eqStartEnd then do
       EFn.runEffectFn1 patch $ Update
-        { current: just tupleStartC
-        , next: just tupleEndN
+        { current: nonNull tupleStartC
+        , next: nonNull tupleEndN
         }
       pure args1
         { st = st
@@ -147,8 +147,8 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         }
     else if eqEndStart then do
       EFn.runEffectFn1 patch $ Update
-        { current: just tupleEndC
-        , next: just tupleStartN
+        { current: nonNull tupleEndC
+        , next: nonNull tupleStartN
         }
       pure args1
         { st = st
@@ -218,11 +218,3 @@ nameToIdx = EFn.mkEffectFn1 \{ args, st } ->
         let name = fst (Fn.runFn2 byIdx args.currents idx)
         EFn.runEffectFn3 MO.set name idx ntoi
       pure ntoi
-
-eqName :: Fn.Fn2 (Maybe String) (Maybe String) Boolean
-eqName = Fn.mkFn2 \mc mn ->
-  case mc, mn of
-    Just c, Just n ->
-      c == n
-    _, _ ->
-      false

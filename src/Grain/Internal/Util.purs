@@ -1,6 +1,9 @@
 module Grain.Internal.Util
-  ( just
+  ( nonNull
   , byIdx
+  , byIdxNullable
+  , mapNullable
+  , eqNullable
   , raf
   , head
   , nodeIndexOf
@@ -22,20 +25,23 @@ module Grain.Internal.Util
 import Prelude
 
 import Data.Function.Uncurried as Fn
-import Data.Maybe (Maybe, fromJust)
+import Data.Nullable (Nullable)
 import Effect (Effect)
 import Effect.Uncurried as EFn
-import Partial.Unsafe (unsafePartial)
+import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Node (Node)
 import Web.DOM.Text (Text)
 import Web.Event.Event (Event)
 import Web.Event.EventTarget (EventListener)
 
-just :: forall a. Maybe a -> a
-just x = unsafePartial $ fromJust x
+nonNull :: forall a. Nullable a -> a
+nonNull = unsafeCoerce
 
 foreign import byIdx :: forall a. Fn.Fn2 (Array a) Int a
+foreign import byIdxNullable :: forall a. Fn.Fn2 (Array a) Int (Nullable a)
+foreign import mapNullable :: forall a b. Fn.Fn2 (a -> b) (Nullable a) (Nullable b)
+foreign import eqNullable :: forall a. Fn.Fn2 (Nullable a) (Nullable a) Boolean
 foreign import raf :: EFn.EffectFn1 (Effect Unit) Unit
 foreign import head :: Effect Node
 foreign import createTextNode :: EFn.EffectFn1 String Text

@@ -4,6 +4,24 @@ exports.byIdx = function(xs, i) {
   return xs[i];
 }
 
+exports.byIdxNullable = function(xs, i) {
+  return xs[i];
+}
+
+exports.mapNullable = function(f, a) {
+  if (a === null || a === undefined) {
+    return a;
+  }
+  return f(a);
+}
+
+exports.eqNullable = function(a, b) {
+  if (a === null || a === undefined || b === null || b === undefined) {
+    return false;
+  }
+  return a === b;
+}
+
 exports.raf = function(f) {
   window.requestAnimationFrame(f);
 }

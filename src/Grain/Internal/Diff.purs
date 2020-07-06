@@ -7,14 +7,14 @@ module Grain.Internal.Diff
 
 import Prelude
 
-import Data.Array (length, (!!))
+import Data.Array (length)
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Effect.Uncurried as EFn
 import Grain.Internal.Effect (forE, foreachE, tailRecE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (byIdx, just)
+import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, mapNullable, nonNull)
 
 class HasKey c where
   getKey :: Int -> c -> String
@@ -142,28 +142,28 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
   else if st.startN > st.endN then
     pure args1 { done = true }
   else do
-    let vnodeStartC = args.currents !! st.startC
-        vnodeEndC = args.currents !! st.endC
-        vnodeStartN = args.nexts !! st.startN
-        vnodeEndN = args.nexts !! st.endN
+    let vnodeStartC = Fn.runFn2 byIdxNullable args.currents st.startC
+        vnodeEndC = Fn.runFn2 byIdxNullable args.currents st.endC
+        vnodeStartN = Fn.runFn2 byIdxNullable args.nexts st.startN
+        vnodeEndN = Fn.runFn2 byIdxNullable args.nexts st.endN
 
-        keyStartC = getKey st.startC <$> vnodeStartC
-        keyEndC = getKey st.endC <$> vnodeEndC
-        keyStartN = getKey st.startN <$> vnodeStartN
-        keyEndN = getKey st.endN <$> vnodeEndN
+        keyStartC = Fn.runFn2 mapNullable (getKey st.startC) vnodeStartC
+        keyEndC = Fn.runFn2 mapNullable (getKey st.endC) vnodeEndC
+        keyStartN = Fn.runFn2 mapNullable (getKey st.startN) vnodeStartN
+        keyEndN = Fn.runFn2 mapNullable (getKey st.endN) vnodeEndN
 
-        eqStart = Fn.runFn2 eqKey keyStartC keyStartN
-        eqEnd = Fn.runFn2 eqKey keyEndC keyEndN
-        eqStartEnd = Fn.runFn2 eqKey keyStartC keyEndN
-        eqEndStart = Fn.runFn2 eqKey keyEndC keyStartN
+        eqStart = Fn.runFn2 eqNullable keyStartC keyStartN
+        eqEnd = Fn.runFn2 eqNullable keyEndC keyEndN
+        eqStartEnd = Fn.runFn2 eqNullable keyStartC keyEndN
+        eqEndStart = Fn.runFn2 eqNullable keyEndC keyStartN
 
     if eqStart then do
       EFn.runEffectFn1 patch $ Update
         { context: args.context
         , parentNode: args.parentNode
-        , nodeKey: just keyStartN
-        , current: just vnodeStartC
-        , next: just vnodeStartN
+        , nodeKey: nonNull keyStartN
+        , current: nonNull vnodeStartC
+        , next: nonNull vnodeStartN
         }
       pure args1
         { st = st
@@ -175,9 +175,9 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
       EFn.runEffectFn1 patch $ Update
         { context: args.context
         , parentNode: args.parentNode
-        , nodeKey: just keyEndN
-        , current: just vnodeEndC
-        , next: just vnodeEndN
+        , nodeKey: nonNull keyEndN
+        , current: nonNull vnodeEndC
+        , next: nonNull vnodeEndN
         }
       pure args1
         { st = st
@@ -191,10 +191,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
       EFn.runEffectFn1 patch $ Move
         { context: args.context
         , parentNode: args.parentNode
-        , nodeKey: just keyEndN
+        , nodeKey: nonNull keyEndN
         , index
-        , current: just vnodeStartC
-        , next: just vnodeEndN
+        , current: nonNull vnodeStartC
+        , next: nonNull vnodeEndN
         }
       pure args1
         { st = st
@@ -206,10 +206,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
       EFn.runEffectFn1 patch $ Move
         { context: args.context
         , parentNode: args.parentNode
-        , nodeKey: just keyStartN
+        , nodeKey: nonNull keyStartN
         , index: st.startN
-        , current: just vnodeEndC
-        , next: just vnodeStartN
+        , current: nonNull vnodeEndC
+        , next: nonNull vnodeStartN
         }
       pure args1
         { st = st
@@ -295,11 +295,3 @@ keyToIdx = EFn.mkEffectFn1 \{ args, st } ->
         let key = getKey idx $ Fn.runFn2 byIdx args.currents idx
         EFn.runEffectFn3 MO.set key idx ktoi
       pure ktoi
-
-eqKey :: Fn.Fn2 (Maybe String) (Maybe String) Boolean
-eqKey = Fn.mkFn2 \mc mn ->
-  case mc, mn of
-    Just c, Just n ->
-      c == n
-    _, _ ->
-      false
