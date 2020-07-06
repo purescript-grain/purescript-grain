@@ -8,9 +8,16 @@ exports.byIdxNullable = function(xs, i) {
   return xs[i];
 }
 
+exports.keyNullable = function(f, i, a) {
+  if (a === null || a === undefined) {
+    return null;
+  }
+  return f(i, a);
+}
+
 exports.mapNullable = function(f, a) {
   if (a === null || a === undefined) {
-    return a;
+    return null;
   }
   return f(a);
 }

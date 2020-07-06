@@ -3,6 +3,7 @@ module Grain.Internal.Util
   , nonNull
   , byIdx
   , byIdxNullable
+  , keyNullable
   , mapNullable
   , eqNullable
   , shouldAttribute
@@ -49,6 +50,7 @@ nonNull = unsafeCoerce
 
 foreign import byIdx :: forall a. Fn.Fn2 (Array a) Int a
 foreign import byIdxNullable :: forall a. Fn.Fn2 (Array a) Int (Nullable a)
+foreign import keyNullable :: forall a. Fn.Fn3 (Fn.Fn2 Int a String) Int (Nullable a) (Nullable String)
 foreign import mapNullable :: forall a b. Fn.Fn2 (a -> b) (Nullable a) (Nullable b)
 foreign import eqNullable :: forall a. Fn.Fn2 (Nullable a) (Nullable a) Boolean
 foreign import shouldAttribute :: String -> Boolean

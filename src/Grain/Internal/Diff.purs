@@ -1,7 +1,5 @@
 module Grain.Internal.Diff
-  ( class HasKey
-  , getKey
-  , PatchArgs(..)
+  ( PatchArgs(..)
   , diff
   ) where
 
@@ -13,13 +11,10 @@ import Data.Maybe (Maybe(..))
 import Effect.Uncurried as EFn
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, forE, foreachE, mapNullable, nonNull, tailRecE)
+import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, forE, foreachE, keyNullable, nonNull, tailRecE)
 
-class HasKey c where
-  getKey :: Int -> c -> String
-
-instance hasKeyInt :: HasKey Int where
-  getKey _ = show
+type GetKey c =
+  Fn.Fn2 Int c String
 
 data PatchArgs ctx p c
   = Create
@@ -63,9 +58,8 @@ type DiffArgs ctx p c =
 
 diff
   :: forall ctx p c
-   . HasKey c
-  => EFn.EffectFn2 (Patch ctx p c) (DiffArgs ctx p c) Unit
-diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> do
+   . EFn.EffectFn3 (GetKey c) (Patch ctx p c) (DiffArgs ctx p c) Unit
+diff = EFn.mkEffectFn3 \getKey patch args@{ context, parentNode, currents, nexts } -> do
   let lengthC = length currents
       lengthN = length nexts
   case lengthC, lengthN of
@@ -74,7 +68,7 @@ diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> d
     0, l ->
       EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
         let next = Fn.runFn2 byIdx nexts i
-            nodeKey = getKey i next
+            nodeKey = Fn.runFn2 getKey i next
         EFn.runEffectFn1 patch $ Create
           { context
           , parentNode
@@ -85,7 +79,7 @@ diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> d
     l, 0 ->
       EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
         let current = Fn.runFn2 byIdx currents i
-            nodeKey = getKey i current
+            nodeKey = Fn.runFn2 getKey i current
         EFn.runEffectFn1 patch $ Delete
           { context
           , parentNode
@@ -95,6 +89,7 @@ diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> d
     _, _ -> do
       args1 <- EFn.runEffectFn2 tailRecE diff1
         { done: false
+        , getKey
         , patch
         , args
         , st:
@@ -109,6 +104,7 @@ diff = EFn.mkEffectFn2 \patch args@{ context, parentNode, currents, nexts } -> d
       ktoi <- EFn.runEffectFn1 keyToIdx args1
       void $ EFn.runEffectFn2 tailRecE diff2
         { done: false
+        , getKey
         , patch
         , args
         , st:
@@ -129,13 +125,14 @@ type Diff1State =
 
 type Diff1Args ctx p c =
   { done :: Boolean
+  , getKey :: GetKey c
   , patch :: Patch ctx p c
   , args :: DiffArgs ctx p c
   , st :: Diff1State
   }
 
-diff1 :: forall ctx p c. HasKey c => EFn.EffectFn1 (Diff1Args ctx p c) (Diff1Args ctx p c)
-diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
+diff1 :: forall ctx p c. EFn.EffectFn1 (Diff1Args ctx p c) (Diff1Args ctx p c)
+diff1 = EFn.mkEffectFn1 \args1@{ getKey, patch, args, st } ->
   if st.startC > st.endC then
     pure args1 { done = true }
   else if st.startN > st.endN then
@@ -146,10 +143,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         vnodeStartN = Fn.runFn2 byIdxNullable args.nexts st.startN
         vnodeEndN = Fn.runFn2 byIdxNullable args.nexts st.endN
 
-        keyStartC = Fn.runFn2 mapNullable (getKey st.startC) vnodeStartC
-        keyEndC = Fn.runFn2 mapNullable (getKey st.endC) vnodeEndC
-        keyStartN = Fn.runFn2 mapNullable (getKey st.startN) vnodeStartN
-        keyEndN = Fn.runFn2 mapNullable (getKey st.endN) vnodeEndN
+        keyStartC = Fn.runFn3 keyNullable getKey st.startC vnodeStartC
+        keyEndC = Fn.runFn3 keyNullable getKey st.endC vnodeEndC
+        keyStartN = Fn.runFn3 keyNullable getKey st.startN vnodeStartN
+        keyEndN = Fn.runFn3 keyNullable getKey st.endN vnodeEndN
 
     if Fn.runFn2 eqNullable keyStartC keyStartN then do
       EFn.runEffectFn1 patch $ Update
@@ -222,16 +219,17 @@ type Diff2State =
 
 type Diff2Args ctx p c =
   { done :: Boolean
+  , getKey :: GetKey c
   , patch :: Patch ctx p c
   , args :: DiffArgs ctx p c
   , st :: Diff2State
   }
 
-diff2 :: forall ctx p c. HasKey c => EFn.EffectFn1 (Diff2Args ctx p c) (Diff2Args ctx p c)
-diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
+diff2 :: forall ctx p c. EFn.EffectFn1 (Diff2Args ctx p c) (Diff2Args ctx p c)
+diff2 = EFn.mkEffectFn1 \args2@{ getKey, patch, args, st } ->
   if st.startN <= st.endN then do
     let vnodeN = Fn.runFn2 byIdx args.nexts st.startN
-        keyN = getKey st.startN vnodeN
+        keyN = Fn.runFn2 getKey st.startN vnodeN
     mIdxC <- EFn.runEffectFn2 MO.get keyN st.ktoi
     case mIdxC of
       Nothing -> do
@@ -278,14 +276,13 @@ diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
 
 keyToIdx
   :: forall ctx p c
-   . HasKey c
-  => EFn.EffectFn1 (Diff1Args ctx p c) (MObject Int)
-keyToIdx = EFn.mkEffectFn1 \{ args, st } ->
+   . EFn.EffectFn1 (Diff1Args ctx p c) (MObject Int)
+keyToIdx = EFn.mkEffectFn1 \{ getKey, args, st } ->
   if st.startC > st.endC
     then MO.new
     else do
       ktoi <- MO.new
       EFn.runEffectFn3 forE st.startC (st.endC + 1) $ EFn.mkEffectFn1 \idx -> do
-        let key = getKey idx $ Fn.runFn2 byIdx args.currents idx
+        let key = Fn.runFn2 getKey idx $ Fn.runFn2 byIdx args.currents idx
         EFn.runEffectFn3 MO.set key idx ktoi
       pure ktoi

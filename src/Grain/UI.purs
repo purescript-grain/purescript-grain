@@ -36,7 +36,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, which)
-import Grain.Internal.Diff (class HasKey, PatchArgs(..), diff)
+import Grain.Internal.Diff (PatchArgs(..), diff)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
 import Grain.Internal.MMap (MMap)
@@ -79,18 +79,6 @@ data VElement
       { fingerprint :: Maybe String
       , render :: Render VNode
       }
-
-instance hasKeyVNode :: HasKey VNode where
-  getKey idx (VNode k velement) =
-    case velement of
-      VText _ ->
-        "text_" <> identifier
-      VElement { tagName } ->
-        "element_" <> tagName <> "_" <> identifier
-      VComponent _ ->
-        "component_" <> identifier
-    where
-      identifier = fromMaybe (show idx) k
 
 -- | Add a key to a `VNode`.
 key :: String -> VNode -> VNode
@@ -316,7 +304,7 @@ mount vnode parentNode = do
   componentRefs <- MM.new
   nodeRefs <- newNodeRefs
   EFn.runEffectFn2 registerParentNode parentNode nodeRefs
-  EFn.runEffectFn2 diff patch
+  EFn.runEffectFn3 diff getKey patch
     { context:
         { isSvg: false
         , deleting: false
@@ -354,6 +342,17 @@ switchToDeleting context =
     else context { deleting = true }
 
 
+
+getKey :: Fn.Fn2 Int VNode String
+getKey = Fn.mkFn2 \idx (VNode k velement) ->
+  let identifier = fromMaybe (show idx) k
+   in case velement of
+        VText _ ->
+          "text_" <> identifier
+        VElement { tagName } ->
+          "element_" <> tagName <> "_" <> identifier
+        VComponent _ ->
+          "component_" <> identifier
 
 patch :: EFn.EffectFn1 (PatchArgs UIContext Node VNode) Unit
 patch = EFn.mkEffectFn1 \args ->
@@ -402,7 +401,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
         let el = unsafeCoerce node
             ctx = Fn.runFn2 switchToSvg nv.tagName context
         EFn.runEffectFn5 updateElement ctx.isSvg ctx.styler cv nv el
-        EFn.runEffectFn2 diff patch
+        EFn.runEffectFn3 diff getKey patch
           { context: ctx
           , parentNode: node
           , currents: cv.children
@@ -425,7 +424,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
       el <- EFn.runEffectFn3 allocElement ctx.isSvg ctx.styler nv
       let node = E.toNode el
       EFn.runEffectFn2 registerParentNode node ctx.nodeRefs
-      EFn.runEffectFn2 diff patch
+      EFn.runEffectFn3 diff getKey patch
         { context: ctx
         , parentNode: node
         , currents: []
@@ -443,7 +442,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
       EFn.runEffectFn2 MM.del node context.componentRefs
       pure node
     Just node, Just (VElement cv), Nothing -> do
-      EFn.runEffectFn2 diff patch
+      EFn.runEffectFn3 diff getKey patch
         { context
         , parentNode: node
         , currents: cv.children
@@ -595,7 +594,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
         parentNode <- getPortalRoot
         h <- EFn.runEffectFn2 addPortalHistory vnode componentRef
         EFn.runEffectFn2 registerParentNode parentNode context.nodeRefs
-        EFn.runEffectFn2 diff patch
+        EFn.runEffectFn3 diff getKey patch
           { context
           , parentNode
           , currents: []
@@ -605,7 +604,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
       updatePortal = do
         parentNode <- getPortalRoot
         h <- EFn.runEffectFn2 addPortalHistory vnode componentRef
-        EFn.runEffectFn2 diff patch
+        EFn.runEffectFn3 diff getKey patch
           { context
           , parentNode
           , currents: [ Fn.runFn2 byIdx h 1 ]
@@ -615,7 +614,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
       deletePortal = do
         parentNode <- getPortalRoot
         h <- EFn.runEffectFn1 componentPortalHistory componentRef
-        EFn.runEffectFn2 diff patch
+        EFn.runEffectFn3 diff getKey patch
           { context
           , parentNode
           , currents: [ Fn.runFn2 byIdx h 0 ]

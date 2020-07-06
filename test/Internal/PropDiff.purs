@@ -1,4 +1,4 @@
-module Test.UI.PropDiff where
+module Test.Internal.PropDiff where
 
 import Prelude
 

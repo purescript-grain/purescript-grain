@@ -1,30 +1,25 @@
-module Test.UI.Diff where
+module Test.Internal.Diff where
 
 import Prelude
 
 import Data.Array (delete, insertAt)
 import Data.Foldable (for_)
+import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Effect.Uncurried as EFn
-import Grain.Internal.Diff (PatchArgs(..), diff, getKey)
-import Grain.Markup as H
+import Grain.Internal.Diff (PatchArgs(..), diff)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 
 testDiff :: TestSuite
 testDiff = suite "Diff" do
-  test "getKey" do
-    Assert.equal "text_0" $ getKey 0 $ H.text "test text"
-    Assert.equal "element_span_1" $ getKey 1 $ H.span
-    Assert.equal "element_span_key1" $ getKey 1 $ H.key "key1" $ H.span
-    Assert.equal "component_key2" $ getKey 2 $ H.key "key2" $ H.component $ pure H.span
   suite "diff" do
     for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
-        liftEffect $ EFn.runEffectFn2 diff patch
+        liftEffect $ EFn.runEffectFn3 diff getKey patch
           { context: unit
           , parentNode: ref
           , currents: startingList
@@ -34,7 +29,7 @@ testDiff = suite "Diff" do
         Assert.equal targetList sourceList
     test ("[] -> " <> show startingList) do
       ref <- liftEffect $ new []
-      liftEffect $ EFn.runEffectFn2 diff patch
+      liftEffect $ EFn.runEffectFn3 diff getKey patch
         { context: unit
         , parentNode: ref
         , currents: []
@@ -130,6 +125,9 @@ targetLists =
   , [ 9, 8, 6, 4, 3, 0 ]
   , [ 100, 101, 102, 0, 1, 2, 3000, 500, 34, 23 ]
   ]
+
+getKey :: Fn.Fn2 Int Int String
+getKey = Fn.mkFn2 \_ i -> show i
 
 patch :: EFn.EffectFn1 (PatchArgs Unit (Ref (Array Int)) Int) Unit
 patch = EFn.mkEffectFn1 \act ->
