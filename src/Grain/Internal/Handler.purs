@@ -33,9 +33,9 @@ patch
   -> EFn.EffectFn1 (PatchArgs (Event -> Effect Unit)) Unit
 patch element = EFn.mkEffectFn1 \act ->
   case act of
-    Create { next: Tuple name handler } ->
-      EFn.runEffectFn3 setHandler name handler element
     Update { next: Tuple name handler } ->
+      EFn.runEffectFn3 setHandler name handler element
+    Create { next: Tuple name handler } ->
       EFn.runEffectFn3 setHandler name handler element
     Delete { current: Tuple name _ } ->
       EFn.runEffectFn3 setAny name null element

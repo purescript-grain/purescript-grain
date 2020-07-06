@@ -36,12 +36,12 @@ patch
   -> EFn.EffectFn1 (PatchArgs String) Unit
 patch isSvg element = EFn.mkEffectFn1 \act ->
   case act of
+    Update { current: Tuple _ c, next: Tuple name n } ->
+      EFn.runEffectFn2 whenE (c /= n) (EFn.runEffectFn4 setProp isSvg name n element)
     Create { next: Tuple name val } ->
       EFn.runEffectFn4 setProp isSvg name val element
     Delete { current: Tuple name _ } ->
       EFn.runEffectFn3 removeProp isSvg name element
-    Update { current: Tuple _ c, next: Tuple name n } ->
-      EFn.runEffectFn2 whenE (c /= n) (EFn.runEffectFn4 setProp isSvg name n element)
 
 setProp :: EFn.EffectFn4 Boolean String String Element Unit
 setProp = EFn.mkEffectFn4 \isSvg name val element ->

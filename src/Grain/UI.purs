@@ -359,6 +359,10 @@ switchToDeleting context =
 patch :: EFn.EffectFn1 (PatchArgs UIContext Node VNode) Unit
 patch = EFn.mkEffectFn1 \args ->
   case args of
+    Update { context, parentNode, nodeKey, current: VNode _ current', next: VNode _ next' } -> do
+      target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
+      void $ EFn.runEffectFn4 eval context target (Just current') (Just next')
+
     Create { context, parentNode, nodeKey, index, next: VNode _ next' } -> do
       node <- EFn.runEffectFn4 eval context Nothing Nothing (Just next')
       EFn.runEffectFn4 registerChildNode parentNode nodeKey node context.nodeRefs
@@ -372,10 +376,6 @@ patch = EFn.mkEffectFn1 \args ->
         EFn.runEffectFn3 unregisterChildNode parentNode nodeKey ctx.nodeRefs
         EFn.runEffectFn2 removeChild node parentNode
 
-    Update { context, parentNode, nodeKey, current: VNode _ current', next: VNode _ next' } -> do
-      target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
-      void $ EFn.runEffectFn4 eval context target (Just current') (Just next')
-
     Move { context, parentNode, nodeKey, index, current: VNode _ current', next: VNode _ next' } -> do
       target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
       node <- EFn.runEffectFn4 eval context target (Just current') (Just next')
@@ -388,6 +388,30 @@ patch = EFn.mkEffectFn1 \args ->
 eval :: EFn.EffectFn4 UIContext (Maybe Node) (Maybe VElement) (Maybe VElement) Node
 eval = EFn.mkEffectFn4 \context target current next -> do
   case target, current, next of
+    -- Update
+    Just node, Just (VText ct), Just (VText nt) -> do
+      EFn.runEffectFn2 whenE (ct /= nt) do
+        EFn.runEffectFn2 setTextContent nt node
+      pure node
+    Just node, Just (VComponent cc), Just (VComponent nc) -> do
+      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cc nc) do
+        componentRef <- EFn.runEffectFn2 MM.unsafeGet node context.componentRefs
+        void $ EFn.runEffectFn4 evalComponent context (Just node) nc.render componentRef
+      pure node
+    Just node, Just (VElement cv), Just (VElement nv) -> do
+      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cv nv) do
+        let el = unsafeCoerce node
+            ctx = Fn.runFn2 switchToSvg nv.tagName context
+        EFn.runEffectFn5 updateElement ctx.isSvg ctx.styler cv nv el
+        EFn.runEffectFn2 diff patch
+          { context: ctx
+          , parentNode: node
+          , currents: cv.children
+          , nexts: nv.children
+          }
+        nv.didUpdate el
+      pure node
+
     -- Create
     Nothing, Nothing, Just (VText nt) -> do
       txt <- EFn.runEffectFn1 createTextNode nt
@@ -428,30 +452,6 @@ eval = EFn.mkEffectFn4 \context target current next -> do
         }
       cv.didDelete $ unsafeCoerce node
       EFn.runEffectFn2 unregisterParentNode node context.nodeRefs
-      pure node
-
-    -- Update
-    Just node, Just (VText ct), Just (VText nt) -> do
-      EFn.runEffectFn2 whenE (ct /= nt) do
-        EFn.runEffectFn2 setTextContent nt node
-      pure node
-    Just node, Just (VComponent cc), Just (VComponent nc) -> do
-      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cc nc) do
-        componentRef <- EFn.runEffectFn2 MM.unsafeGet node context.componentRefs
-        void $ EFn.runEffectFn4 evalComponent context (Just node) nc.render componentRef
-      pure node
-    Just node, Just (VElement cv), Just (VElement nv) -> do
-      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cv nv) do
-        let el = unsafeCoerce node
-            ctx = Fn.runFn2 switchToSvg nv.tagName context
-        EFn.runEffectFn5 updateElement ctx.isSvg ctx.styler cv nv el
-        EFn.runEffectFn2 diff patch
-          { context: ctx
-          , parentNode: node
-          , currents: cv.children
-          , nexts: nv.children
-          }
-        nv.didUpdate el
       pure node
 
     _, _, _ ->
