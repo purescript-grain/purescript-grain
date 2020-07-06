@@ -12,7 +12,7 @@ import Data.Array (filter, snoc)
 import Effect (Effect)
 import Effect.Ref (Ref, modify_, new, read)
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (sequenceE)
+import Grain.Internal.Util (sequenceE)
 import Unsafe.Reference (unsafeRefEq)
 
 newtype Emitter = Emitter (Ref (Array (Effect Unit)))

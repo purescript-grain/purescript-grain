@@ -11,10 +11,9 @@ import Data.Array (length)
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (forE, foreachE, tailRecE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, mapNullable, nonNull)
+import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, forE, foreachE, mapNullable, nonNull, tailRecE)
 
 class HasKey c where
   getKey :: Int -> c -> String

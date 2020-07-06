@@ -1,5 +1,6 @@
 module Grain.Internal.Util
-  ( nonNull
+  ( Step
+  , nonNull
   , byIdx
   , byIdxNullable
   , mapNullable
@@ -20,6 +21,11 @@ module Grain.Internal.Util
   , isProperty
   , isBoolean
   , mkEventListener
+  , whenE
+  , forE
+  , foreachE
+  , sequenceE
+  , tailRecE
   ) where
 
 import Prelude
@@ -34,6 +40,8 @@ import Web.DOM.Node (Node)
 import Web.DOM.Text (Text)
 import Web.Event.Event (Event)
 import Web.Event.EventTarget (EventListener)
+
+type Step r = { done :: Boolean | r }
 
 nonNull :: forall a. Nullable a -> a
 nonNull = unsafeCoerce
@@ -58,3 +66,8 @@ foreign import removeAttribute :: EFn.EffectFn2 String Element Unit
 foreign import isProperty :: Fn.Fn2 String Element Boolean
 foreign import isBoolean :: Fn.Fn2 String Element Boolean
 foreign import mkEventListener :: (Event -> Effect Unit) -> EventListener
+foreign import whenE :: EFn.EffectFn2 Boolean (Effect Unit) Unit
+foreign import forE :: forall a . EFn.EffectFn3 Int Int (EFn.EffectFn1 Int a) Unit
+foreign import foreachE :: forall a b. EFn.EffectFn2 (Array a) (EFn.EffectFn1 a b) Unit
+foreign import sequenceE :: forall a. EFn.EffectFn1 (Array (Effect a)) Unit
+foreign import tailRecE :: forall r. EFn.EffectFn2 (EFn.EffectFn1 (Step r) (Step r)) (Step r) (Step r)

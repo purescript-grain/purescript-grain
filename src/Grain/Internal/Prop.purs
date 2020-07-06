@@ -11,9 +11,8 @@ import Data.Function.Uncurried as Fn
 import Data.Maybe (isJust)
 import Data.Tuple (Tuple(..))
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (foreachE, whenE)
 import Grain.Internal.PropDiff (PatchArgs(..), diff)
-import Grain.Internal.Util (isBoolean, isProperty, removeAttribute, setAny, setAttribute)
+import Grain.Internal.Util (foreachE, isBoolean, isProperty, removeAttribute, setAny, setAttribute, whenE)
 import Web.DOM.Element (Element)
 
 type Props =

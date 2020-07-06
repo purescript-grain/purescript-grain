@@ -8,9 +8,8 @@ import Prelude
 
 import Data.Maybe (Maybe(..))
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (whenE)
 import Grain.Internal.Styler (Styler, registerStyle)
-import Grain.Internal.Util (removeAttribute, setAny, setAttribute)
+import Grain.Internal.Util (removeAttribute, setAny, setAttribute, whenE)
 import Web.DOM.Element (Element)
 
 type SpecialProps =

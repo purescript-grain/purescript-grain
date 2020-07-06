@@ -18,10 +18,9 @@ import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (whenE)
 import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
-import Grain.Internal.Util (appendChild, createElement, head, setTextContent)
+import Grain.Internal.Util (appendChild, createElement, head, setTextContent, whenE)
 import Web.DOM.Element as E
 import Web.DOM.Node (Node)
 

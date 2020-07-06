@@ -10,9 +10,8 @@ import Data.Nullable (null)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Uncurried as EFn
-import Grain.Internal.Effect (foreachE)
 import Grain.Internal.PropDiff (PatchArgs(..), diff)
-import Grain.Internal.Util (mkEventListener, setAny)
+import Grain.Internal.Util (foreachE, mkEventListener, setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
 

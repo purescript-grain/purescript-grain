@@ -39,7 +39,6 @@ import Effect.Ref as Ref
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, which)
 import Grain.Internal.Diff (class HasKey, PatchArgs(..), diff)
-import Grain.Internal.Effect (sequenceE, whenE)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
 import Grain.Internal.MMap (MMap)
@@ -50,7 +49,7 @@ import Grain.Internal.Prop (Props)
 import Grain.Internal.SpecialProp (SpecialProps)
 import Grain.Internal.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Internal.Styler (Styler, mountStyler)
-import Grain.Internal.Util (byIdx, createTextNode, nodeIndexOf, putChild, raf, removeChild, setTextContent)
+import Grain.Internal.Util (byIdx, createTextNode, nodeIndexOf, putChild, raf, removeChild, sequenceE, setTextContent, whenE)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Element as E
