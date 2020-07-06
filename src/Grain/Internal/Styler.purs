@@ -6,8 +6,8 @@ module Grain.Internal.Styler
 
 import Prelude
 
+import Data.Array (foldr)
 import Data.Char (toCharCode)
-import Data.Foldable (foldr)
 import Data.Function.Uncurried as Fn
 import Data.Int (base36, toStringAs)
 import Data.Int.Bits (xor, zshr)

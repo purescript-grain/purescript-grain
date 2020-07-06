@@ -27,7 +27,7 @@ import Prelude
 
 import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
-import Data.Array (catMaybes, snoc, take, (!!), (:))
+import Data.Array (snoc, take, (!!), (:))
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple (Tuple(..))
@@ -50,7 +50,7 @@ import Grain.Internal.Prop (Props)
 import Grain.Internal.SpecialProp (SpecialProps)
 import Grain.Internal.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Internal.Styler (Styler, mountStyler)
-import Grain.Internal.Util (createTextNode, nodeIndexOf, putChild, raf, removeChild, setTextContent)
+import Grain.Internal.Util (byIdx, createTextNode, nodeIndexOf, putChild, raf, removeChild, setTextContent)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Element as E
@@ -608,8 +608,8 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
         EFn.runEffectFn2 diff patch
           { context
           , parentNode
-          , currents: catMaybes [ h !! 1 ]
-          , nexts: catMaybes [ h !! 0 ]
+          , currents: [ Fn.runFn2 byIdx h 1 ]
+          , nexts: [ vnode ]
           }
 
       deletePortal = do
@@ -618,7 +618,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
         EFn.runEffectFn2 diff patch
           { context
           , parentNode
-          , currents: catMaybes [ h !! 0 ]
+          , currents: [ Fn.runFn2 byIdx h 0 ]
           , nexts: []
           }
         EFn.runEffectFn2 unregisterParentNode parentNode context.nodeRefs
