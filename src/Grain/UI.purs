@@ -466,7 +466,8 @@ isDifferent
 isDifferent = Fn.mkFn2 \c n ->
   case c.fingerprint, n.fingerprint of
     Nothing, Nothing -> true
-    cf, nf -> cf /= nf
+    Just cf, Just nf -> cf /= nf
+    _, _ -> true
 
 
 
