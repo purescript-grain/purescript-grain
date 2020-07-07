@@ -25,7 +25,7 @@ module Grain.UI
 
 import Prelude
 
-import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
+import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Data.Array (snoc, take, (!!), (:))
 import Data.Function.Uncurried as Fn
@@ -264,7 +264,7 @@ useValue
   -> Render a
 useValue proxy = Render do
   QueryBox query <- ask
-  withReaderT (const query) $ liftEffect do
+  liftEffect do
     query.listenValue proxy
     query.selectValue proxy
 
