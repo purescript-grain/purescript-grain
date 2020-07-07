@@ -17,7 +17,7 @@ Go to [examples](https://github.com/purescript-grain/purescript-grain/tree/maste
   - Auto-generated classname
 - **Entirely PureScript**
   - No npm dependencies
-  - Implementation is writted in PureScript
+  - Implementation is written in PureScript
 
 ## Installation
 
