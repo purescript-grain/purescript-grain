@@ -29,7 +29,7 @@ import Control.Monad.Reader (ReaderT, ask, runReaderT, withReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Data.Array (snoc, take, (!!), (:))
 import Data.Function.Uncurried as Fn
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Class (liftEffect)
@@ -345,7 +345,10 @@ switchToDeleting context =
 
 getKey :: Fn.Fn2 Int VNode String
 getKey = Fn.mkFn2 \idx (VNode k velement) ->
-  let identifier = fromMaybe (show idx) k
+  let identifier =
+        case k of
+          Just k' -> k'
+          _ -> show idx
    in case velement of
         VText _ ->
           "text_" <> identifier
