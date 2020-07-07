@@ -29,6 +29,7 @@ import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
 import Data.Array (snoc, take, (!!), (:))
 import Data.Function.Uncurried as Fn
+import Data.Lazy (Lazy, defer, force)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
@@ -36,7 +37,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, which)
-import Grain.Internal.Diff (PatchArgs(..), diff)
+import Grain.Internal.Diff (Create, Delete, GetKey, Move, Update, Patch, diff)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
 import Grain.Internal.MMap (MMap)
@@ -304,7 +305,7 @@ mount vnode parentNode = do
   componentRefs <- MM.new
   nodeRefs <- newNodeRefs
   EFn.runEffectFn2 registerParentNode parentNode nodeRefs
-  EFn.runEffectFn3 diff getKey patch
+  EFn.runEffectFn2 diff (force patch)
     { context:
         { isSvg: false
         , deleting: false
@@ -343,7 +344,17 @@ switchToDeleting context =
 
 
 
-getKey :: Fn.Fn2 Int VNode String
+-- Use lazy to avoid cyclic reference
+patch :: Lazy (Patch UIContext Node VNode)
+patch = defer \_ ->
+  { getKey
+  , create
+  , delete
+  , update
+  , move
+  }
+
+getKey :: GetKey VNode
 getKey = Fn.mkFn2 \idx (VNode k velement) ->
   let identifier =
         case k of
@@ -357,32 +368,37 @@ getKey = Fn.mkFn2 \idx (VNode k velement) ->
         VComponent _ ->
           "component_" <> identifier
 
-patch :: EFn.EffectFn1 (PatchArgs UIContext Node VNode) Unit
-patch = EFn.mkEffectFn1 \args ->
-  case args of
-    Update { context, parentNode, nodeKey, current: VNode _ current', next: VNode _ next' } -> do
-      target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
-      void $ EFn.runEffectFn4 eval context target (Just current') (Just next')
+create :: Create UIContext Node VNode
+create = EFn.mkEffectFn5
+  \context parentNode nodeKey index (VNode _ next) -> do
+    node <- EFn.runEffectFn4 eval context Nothing Nothing (Just next)
+    EFn.runEffectFn4 registerChildNode parentNode nodeKey node context.nodeRefs
+    EFn.runEffectFn3 putChild index node parentNode
 
-    Create { context, parentNode, nodeKey, index, next: VNode _ next' } -> do
-      node <- EFn.runEffectFn4 eval context Nothing Nothing (Just next')
-      EFn.runEffectFn4 registerChildNode parentNode nodeKey node context.nodeRefs
-      EFn.runEffectFn3 putChild index node parentNode
+delete :: Delete UIContext Node VNode
+delete = EFn.mkEffectFn4
+  \context parentNode nodeKey (VNode _ current) -> do
+    let ctx = switchToDeleting context
+    target <- EFn.runEffectFn3 getChildNode parentNode nodeKey ctx.nodeRefs
+    node <- EFn.runEffectFn4 eval ctx target (Just current) Nothing
+    EFn.runEffectFn2 whenE (not context.deleting) do
+      EFn.runEffectFn3 unregisterChildNode parentNode nodeKey ctx.nodeRefs
+      EFn.runEffectFn2 removeChild node parentNode
 
-    Delete { context, parentNode, nodeKey, current: VNode _ current' } -> do
-      let ctx = switchToDeleting context
-      target <- EFn.runEffectFn3 getChildNode parentNode nodeKey ctx.nodeRefs
-      node <- EFn.runEffectFn4 eval ctx target (Just current') Nothing
-      EFn.runEffectFn2 whenE (not context.deleting) do
-        EFn.runEffectFn3 unregisterChildNode parentNode nodeKey ctx.nodeRefs
-        EFn.runEffectFn2 removeChild node parentNode
+update :: Update UIContext Node VNode
+update = EFn.mkEffectFn5
+  \context parentNode nodeKey (VNode _ current) (VNode _ next) -> do
+    target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
+    void $ EFn.runEffectFn4 eval context target (Just current) (Just next)
 
-    Move { context, parentNode, nodeKey, index, current: VNode _ current', next: VNode _ next' } -> do
-      target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
-      node <- EFn.runEffectFn4 eval context target (Just current') (Just next')
-      ni <- EFn.runEffectFn1 nodeIndexOf node
-      let adjustedIdx = if ni < index then index + 1 else index
-      EFn.runEffectFn3 putChild adjustedIdx node parentNode
+move :: Move UIContext Node VNode
+move = EFn.mkEffectFn6
+  \context parentNode nodeKey index (VNode _ current) (VNode _ next) -> do
+    target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
+    node <- EFn.runEffectFn4 eval context target (Just current) (Just next)
+    ni <- EFn.runEffectFn1 nodeIndexOf node
+    let adjustedIdx = if ni < index then index + 1 else index
+    EFn.runEffectFn3 putChild adjustedIdx node parentNode
 
 
 
@@ -404,7 +420,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
         let el = unsafeCoerce node
             ctx = Fn.runFn2 switchToSvg nv.tagName context
         EFn.runEffectFn5 updateElement ctx.isSvg ctx.styler cv nv el
-        EFn.runEffectFn3 diff getKey patch
+        EFn.runEffectFn2 diff (force patch)
           { context: ctx
           , parentNode: node
           , currents: cv.children
@@ -427,7 +443,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
       el <- EFn.runEffectFn3 allocElement ctx.isSvg ctx.styler nv
       let node = E.toNode el
       EFn.runEffectFn2 registerParentNode node ctx.nodeRefs
-      EFn.runEffectFn3 diff getKey patch
+      EFn.runEffectFn2 diff (force patch)
         { context: ctx
         , parentNode: node
         , currents: []
@@ -445,7 +461,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
       EFn.runEffectFn2 MM.del node context.componentRefs
       pure node
     Just node, Just (VElement cv), Nothing -> do
-      EFn.runEffectFn3 diff getKey patch
+      EFn.runEffectFn2 diff (force patch)
         { context
         , parentNode: node
         , currents: cv.children
@@ -597,7 +613,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
         parentNode <- getPortalRoot
         h <- EFn.runEffectFn2 addPortalHistory vnode componentRef
         EFn.runEffectFn2 registerParentNode parentNode context.nodeRefs
-        EFn.runEffectFn3 diff getKey patch
+        EFn.runEffectFn2 diff (force patch)
           { context
           , parentNode
           , currents: []
@@ -607,7 +623,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
       updatePortal = do
         parentNode <- getPortalRoot
         h <- EFn.runEffectFn2 addPortalHistory vnode componentRef
-        EFn.runEffectFn3 diff getKey patch
+        EFn.runEffectFn2 diff (force patch)
           { context
           , parentNode
           , currents: [ Fn.runFn2 byIdx h 1 ]
@@ -617,7 +633,7 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
       deletePortal = do
         parentNode <- getPortalRoot
         h <- EFn.runEffectFn1 componentPortalHistory componentRef
-        EFn.runEffectFn3 diff getKey patch
+        EFn.runEffectFn2 diff (force patch)
           { context
           , parentNode
           , currents: [ Fn.runFn2 byIdx h 0 ]

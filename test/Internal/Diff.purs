@@ -2,14 +2,14 @@ module Test.Internal.Diff where
 
 import Prelude
 
-import Data.Array (delete, insertAt)
+import Data.Array as A
 import Data.Foldable (for_)
 import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify, modify_, new, read, write)
 import Effect.Uncurried as EFn
-import Grain.Internal.Diff (PatchArgs(..), diff)
+import Grain.Internal.Diff (Create, Delete, GetKey, Move, Update, Patch, diff)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 
@@ -19,7 +19,7 @@ testDiff = suite "Diff" do
     for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
-        liftEffect $ EFn.runEffectFn3 diff getKey patch
+        liftEffect $ EFn.runEffectFn2 diff patch
           { context: unit
           , parentNode: ref
           , currents: startingList
@@ -29,7 +29,7 @@ testDiff = suite "Diff" do
         Assert.equal targetList sourceList
     test ("[] -> " <> show startingList) do
       ref <- liftEffect $ new []
-      liftEffect $ EFn.runEffectFn3 diff getKey patch
+      liftEffect $ EFn.runEffectFn2 diff patch
         { context: unit
         , parentNode: ref
         , currents: []
@@ -126,26 +126,38 @@ targetLists =
   , [ 100, 101, 102, 0, 1, 2, 3000, 500, 34, 23 ]
   ]
 
-getKey :: Fn.Fn2 Int Int String
+patch :: Patch Unit (Ref (Array Int)) Int
+patch =
+  { getKey
+  , create
+  , delete
+  , update
+  , move
+  }
+
+getKey :: GetKey Int
 getKey = Fn.mkFn2 \_ i -> show i
 
-patch :: EFn.EffectFn1 (PatchArgs Unit (Ref (Array Int)) Int) Unit
-patch = EFn.mkEffectFn1 \act ->
-  case act of
-    Create { parentNode, index, next } -> do
-      list <- read parentNode
-      case insertAt index next list of
-        Nothing -> pure unit
-        Just list' -> write list' parentNode
+create :: Create Unit (Ref (Array Int)) Int
+create = EFn.mkEffectFn5
+  \_ parentNode _ index next -> do
+    list <- read parentNode
+    case A.insertAt index next list of
+      Nothing -> pure unit
+      Just list' -> write list' parentNode
 
-    Delete { parentNode, current } ->
-      modify_ (delete current) parentNode
+delete :: Delete Unit (Ref (Array Int)) Int
+delete = EFn.mkEffectFn4
+  \_ parentNode _ current ->
+    modify_ (A.delete current) parentNode
 
-    Move { parentNode, index, current, next } -> do
-      list <- modify (delete current) parentNode
-      case insertAt index next list of
-        Nothing -> pure unit
-        Just list' -> write list' parentNode
+update :: Update Unit (Ref (Array Int)) Int
+update = EFn.mkEffectFn5 \_ _ _ _ _ -> pure unit
 
-    _ ->
-      pure unit
+move :: Move Unit (Ref (Array Int)) Int
+move = EFn.mkEffectFn6
+  \_ parentNode _ index current next -> do
+    list <- modify (A.delete current) parentNode
+    case A.insertAt index next list of
+      Nothing -> pure unit
+      Just list' -> write list' parentNode
