@@ -1,35 +1,40 @@
-module Test.UI.Diff where
+module Test.Internal.Diff where
 
 import Prelude
 
-import Control.Safely as Safe
-import Data.Array (deleteAt, insertAt, (!!))
+import Data.Array (delete, insertAt)
+import Data.Foldable (for_)
+import Data.Function.Uncurried as Fn
 import Data.Maybe (Maybe(..))
-import Effect (Effect)
 import Effect.Class (liftEffect)
-import Effect.Ref (Ref, new, read, write)
-import Grain.Markup as H
-import Grain.UI.Diff (diff, getKey)
+import Effect.Ref (Ref, modify, modify_, new, read, write)
+import Effect.Uncurried as EFn
+import Grain.Internal.Diff (PatchArgs(..), diff)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 
 testDiff :: TestSuite
 testDiff = suite "Diff" do
-  test "getKey" do
-    Assert.equal "text_0" $ getKey 0 $ H.text "test text"
-    Assert.equal "element_span_1" $ getKey 1 $ H.span
-    Assert.equal "element_span_key1" $ getKey 1 $ H.key "key1" $ H.span
-    Assert.equal "component_key2" $ getKey 2 $ H.key "key2" $ H.component $ pure H.span
   suite "diff" do
-    Safe.for_ targetLists \targetList ->
+    for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
-        liftEffect $ diff patch ref startingList targetList
+        liftEffect $ EFn.runEffectFn3 diff getKey patch
+          { context: unit
+          , parentNode: ref
+          , currents: startingList
+          , nexts: targetList
+          }
         sourceList <- liftEffect $ read ref
         Assert.equal targetList sourceList
     test ("[] -> " <> show startingList) do
       ref <- liftEffect $ new []
-      liftEffect $ diff patch ref [] startingList
+      liftEffect $ EFn.runEffectFn3 diff getKey patch
+        { context: unit
+        , parentNode: ref
+        , currents: []
+        , nexts: startingList
+        }
       sourceList <- liftEffect $ read ref
       Assert.equal startingList sourceList
 
@@ -121,37 +126,26 @@ targetLists =
   , [ 100, 101, 102, 0, 1, 2, 3000, 500, 34, 23 ]
   ]
 
-type PatchArgs =
-  { current :: Maybe Int
-  , next :: Maybe Int
-  , parentNode :: Ref (Array Int)
-  , nodeIndex :: Int
-  , moveIndex :: Maybe Int
-  }
+getKey :: Fn.Fn2 Int Int String
+getKey = Fn.mkFn2 \_ i -> show i
 
-patch :: PatchArgs -> Effect Unit
-patch x = do
-  list <- read x.parentNode
-  case x.current, x.next of
-    Nothing, Nothing -> pure unit
-    Nothing, Just num ->
-      case insertAt x.nodeIndex num list of
+patch :: EFn.EffectFn1 (PatchArgs Unit (Ref (Array Int)) Int) Unit
+patch = EFn.mkEffectFn1 \act ->
+  case act of
+    Create { parentNode, index, next } -> do
+      list <- read parentNode
+      case insertAt index next list of
         Nothing -> pure unit
-        Just list' -> write list' x.parentNode
-    Just _, Nothing ->
-      case deleteAt x.nodeIndex list of
+        Just list' -> write list' parentNode
+
+    Delete { parentNode, current } ->
+      modify_ (delete current) parentNode
+
+    Move { parentNode, index, current, next } -> do
+      list <- modify (delete current) parentNode
+      case insertAt index next list of
         Nothing -> pure unit
-        Just list' -> write list' x.parentNode
-    Just _, Just _ ->
-      case x.moveIndex of
-        Nothing -> pure unit
-        Just i ->
-          case list !! x.nodeIndex of
-            Nothing -> pure unit
-            Just item ->
-              case deleteAt x.nodeIndex list of
-                Nothing -> pure unit
-                Just list' ->
-                  case insertAt i item list' of
-                    Nothing -> pure unit
-                    Just list_ -> write list_ x.parentNode
+        Just list' -> write list' parentNode
+
+    _ ->
+      pure unit
