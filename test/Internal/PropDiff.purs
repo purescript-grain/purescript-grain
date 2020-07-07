@@ -10,7 +10,7 @@ import Data.Tuple.Nested ((/\))
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref, modify_, new, read)
 import Effect.Uncurried as EFn
-import Grain.Internal.PropDiff (PatchArgs(..), diff)
+import Grain.Internal.PropDiff (Create, Delete, Patch, Update, diff)
 import Test.Unit (TestSuite, suite, test)
 import Test.Unit.Assert as Assert
 
@@ -20,16 +20,18 @@ testPropDiff = suite "PropDiff" do
     for_ targetLists \targetList ->
       test (show startingList <> " -> " <> show targetList) do
         ref <- liftEffect $ new startingList
-        liftEffect $ EFn.runEffectFn2 diff (patch ref)
-          { currents: startingList
+        liftEffect $ EFn.runEffectFn2 diff patch
+          { context: ref
+          , currents: startingList
           , nexts: targetList
           }
         sourceList <- liftEffect $ read ref
         Assert.equal (sort targetList) (sort sourceList)
     test ("[] -> " <> show startingList) do
       ref <- liftEffect $ new []
-      liftEffect $ EFn.runEffectFn2 diff (patch ref)
-        { currents: []
+      liftEffect $ EFn.runEffectFn2 diff patch
+        { context: ref
+        , currents: []
         , nexts: startingList
         }
       sourceList <- liftEffect $ read ref
@@ -160,14 +162,17 @@ del (Tuple nameN _) current@(Tuple nameC _)
   | nameN == nameC = Nothing
   | otherwise = Just current
 
-patch
-  :: Ref (Array (Tuple String String))
-  -> EFn.EffectFn1 (PatchArgs String) Unit
-patch list = EFn.mkEffectFn1 \act ->
-  case act of
-    Create { next } ->
-      modify_ (cons next) list
-    Delete { current } ->
-      modify_ (catMaybes <<< map (del current)) list
-    Update { next } ->
-      modify_ (map (upd next)) list
+patch :: Patch (Ref (Array (Tuple String String))) String
+patch = { create, delete, update }
+
+create :: Create (Ref (Array (Tuple String String))) String
+create = EFn.mkEffectFn2 \list next ->
+  modify_ (cons next) list
+
+delete :: Delete (Ref (Array (Tuple String String))) String
+delete = EFn.mkEffectFn2 \list current ->
+  modify_ (catMaybes <<< map (del current)) list
+
+update :: Update (Ref (Array (Tuple String String))) String
+update = EFn.mkEffectFn3 \list _ next ->
+  modify_ (map (upd next)) list

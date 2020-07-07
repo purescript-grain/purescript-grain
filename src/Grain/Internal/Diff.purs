@@ -59,30 +59,30 @@ type DiffArgs ctx p c =
 diff
   :: forall ctx p c
    . EFn.EffectFn3 (GetKey c) (Patch ctx p c) (DiffArgs ctx p c) Unit
-diff = EFn.mkEffectFn3 \getKey patch args@{ context, parentNode, currents, nexts } -> do
-  let lengthC = length currents
-      lengthN = length nexts
+diff = EFn.mkEffectFn3 \getKey patch args -> do
+  let lengthC = length args.currents
+      lengthN = length args.nexts
   case lengthC, lengthN of
     0, 0 ->
       pure unit
     0, l ->
       EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
-        let next = Fn.runFn2 byIdx nexts i
+        let next = Fn.runFn2 byIdx args.nexts i
             nodeKey = Fn.runFn2 getKey i next
         EFn.runEffectFn1 patch $ Create
-          { context
-          , parentNode
+          { context: args.context
+          , parentNode: args.parentNode
           , nodeKey
           , index: i
           , next
           }
     l, 0 ->
       EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
-        let current = Fn.runFn2 byIdx currents i
+        let current = Fn.runFn2 byIdx args.currents i
             nodeKey = Fn.runFn2 getKey i current
         EFn.runEffectFn1 patch $ Delete
-          { context
-          , parentNode
+          { context: args.context
+          , parentNode: args.parentNode
           , nodeKey
           , current
           }

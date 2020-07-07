@@ -10,7 +10,7 @@ import Data.Nullable (null)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Uncurried as EFn
-import Grain.Internal.PropDiff (PatchArgs(..), diff)
+import Grain.Internal.PropDiff (Create, Delete, Update, Patch, diff)
 import Grain.Internal.Util (foreachE, mkEventListener, setAny)
 import Web.DOM.Element (Element)
 import Web.Event.Event (Event)
@@ -25,19 +25,25 @@ allocHandlers = EFn.mkEffectFn2 \nexts element ->
 
 updateHandlers :: EFn.EffectFn3 Handlers Handlers Element Unit
 updateHandlers = EFn.mkEffectFn3 \currents nexts element ->
-  EFn.runEffectFn2 diff (patch element) { currents, nexts }
+  EFn.runEffectFn2 diff patch { context: element, currents, nexts }
 
-patch
-  :: Element
-  -> EFn.EffectFn1 (PatchArgs (Event -> Effect Unit)) Unit
-patch element = EFn.mkEffectFn1 \act ->
-  case act of
-    Update { next: Tuple name handler } ->
-      EFn.runEffectFn3 setHandler name handler element
-    Create { next: Tuple name handler } ->
-      EFn.runEffectFn3 setHandler name handler element
-    Delete { current: Tuple name _ } ->
-      EFn.runEffectFn3 setAny name null element
+patch :: Patch Element (Event -> Effect Unit)
+patch = { create, delete, update }
+
+create :: Create Element (Event -> Effect Unit)
+create =
+  EFn.mkEffectFn2 \element (Tuple name handler) ->
+    EFn.runEffectFn3 setHandler name handler element
+
+delete :: Delete Element (Event -> Effect Unit)
+delete =
+  EFn.mkEffectFn2 \element (Tuple name _) ->
+    EFn.runEffectFn3 setAny name null element
+
+update :: Update Element (Event -> Effect Unit)
+update =
+  EFn.mkEffectFn3 \element _ (Tuple name handler) ->
+    EFn.runEffectFn3 setHandler name handler element
 
 setHandler :: EFn.EffectFn3 String (Event -> Effect Unit) Element Unit
 setHandler = EFn.mkEffectFn3 \name handler element ->

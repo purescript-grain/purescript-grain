@@ -1,5 +1,8 @@
 module Grain.Internal.PropDiff
-  ( PatchArgs(..)
+  ( Patch
+  , Create
+  , Delete
+  , Update
   , diff
   ) where
 
@@ -14,43 +17,44 @@ import Grain.Internal.MObject (MObject)
 import Grain.Internal.MObject as MO
 import Grain.Internal.Util (byIdx, byIdxNullable, eqNullable, forE, foreachE, mapNullable, nonNull, tailRecE)
 
-data PatchArgs a
-  = Create
-      { next :: Tuple String a
-      }
-  | Delete
-      { current :: Tuple String a
-      }
-  | Update
-      { current :: Tuple String a
-      , next :: Tuple String a
-      }
+type Patch ctx a =
+  { create :: Create ctx a
+  , delete :: Delete ctx a
+  , update :: Update ctx a
+  }
 
-type Patch a =
-  EFn.EffectFn1 (PatchArgs a) Unit
+type Create ctx a =
+  EFn.EffectFn2 ctx (Tuple String a) Unit
 
-type DiffArgs a =
-  { currents :: Array (Tuple String a)
+type Delete ctx a =
+  EFn.EffectFn2 ctx (Tuple String a) Unit
+
+type Update ctx a =
+  EFn.EffectFn3 ctx (Tuple String a) (Tuple String a) Unit
+
+type DiffArgs ctx a =
+  { context :: ctx
+  , currents :: Array (Tuple String a)
   , nexts :: Array (Tuple String a)
   }
 
 diff
-  :: forall a
-   . EFn.EffectFn2 (Patch a) (DiffArgs a) Unit
-diff = EFn.mkEffectFn2 \patch args@{ currents, nexts } -> do
-  let lengthC = length currents
-      lengthN = length nexts
+  :: forall ctx a
+   . EFn.EffectFn2 (Patch ctx a) (DiffArgs ctx a) Unit
+diff = EFn.mkEffectFn2 \patch args -> do
+  let lengthC = length args.currents
+      lengthN = length args.nexts
   case lengthC, lengthN of
     0, 0 ->
       pure unit
     0, l ->
       EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
-        let next = Fn.runFn2 byIdx nexts i
-        EFn.runEffectFn1 patch $ Create { next }
+        let next = Fn.runFn2 byIdx args.nexts i
+        EFn.runEffectFn2 patch.create args.context next
     l, 0 ->
       EFn.runEffectFn3 forE 0 l $ EFn.mkEffectFn1 \i -> do
-        let current = Fn.runFn2 byIdx currents i
-        EFn.runEffectFn1 patch $ Delete { current }
+        let current = Fn.runFn2 byIdx args.currents i
+        EFn.runEffectFn2 patch.delete args.context current
     _, _ -> do
       args1 <- EFn.runEffectFn2 tailRecE diff1
         { done: false
@@ -82,14 +86,14 @@ type Diff1State =
   , endN :: Int
   }
 
-type Diff1Args a =
+type Diff1Args ctx a =
   { done :: Boolean
-  , patch :: Patch a
-  , args :: DiffArgs a
+  , patch :: Patch ctx a
+  , args :: DiffArgs ctx a
   , st :: Diff1State
   }
 
-diff1 :: forall a. EFn.EffectFn1 (Diff1Args a) (Diff1Args a)
+diff1 :: forall ctx a. EFn.EffectFn1 (Diff1Args ctx a) (Diff1Args ctx a)
 diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
   if st.startC > st.endC then
     pure args1 { done = true }
@@ -107,10 +111,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
         nameEndN = Fn.runFn2 mapNullable fst tupleEndN
 
     if Fn.runFn2 eqNullable nameStartC nameStartN then do
-      EFn.runEffectFn1 patch $ Update
-        { current: nonNull tupleStartC
-        , next: nonNull tupleStartN
-        }
+      EFn.runEffectFn3 patch.update
+        args.context
+        (nonNull tupleStartC)
+        (nonNull tupleStartN)
       pure args1
         { st = st
             { startC = st.startC + 1
@@ -118,10 +122,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             }
         }
     else if Fn.runFn2 eqNullable nameEndC nameEndN then do
-      EFn.runEffectFn1 patch $ Update
-        { current: nonNull tupleEndC
-        , next: nonNull tupleEndN
-        }
+      EFn.runEffectFn3 patch.update
+        args.context
+        (nonNull tupleEndC)
+        (nonNull tupleEndN)
       pure args1
         { st = st
             { endC = st.endC - 1
@@ -129,10 +133,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             }
         }
     else if Fn.runFn2 eqNullable nameStartC nameEndN then do
-      EFn.runEffectFn1 patch $ Update
-        { current: nonNull tupleStartC
-        , next: nonNull tupleEndN
-        }
+      EFn.runEffectFn3 patch.update
+        args.context
+        (nonNull tupleStartC)
+        (nonNull tupleEndN)
       pure args1
         { st = st
             { startC = st.startC + 1
@@ -140,10 +144,10 @@ diff1 = EFn.mkEffectFn1 \args1@{ patch, args, st } ->
             }
         }
     else if Fn.runFn2 eqNullable nameEndC nameStartN then do
-      EFn.runEffectFn1 patch $ Update
-        { current: nonNull tupleEndC
-        , next: nonNull tupleStartN
-        }
+      EFn.runEffectFn3 patch.update
+        args.context
+        (nonNull tupleEndC)
+        (nonNull tupleStartN)
       pure args1
         { st = st
             { endC = st.endC - 1
@@ -159,14 +163,14 @@ type Diff2State =
   , ntoi :: MObject Int
   }
 
-type Diff2Args a =
+type Diff2Args ctx a =
   { done :: Boolean
-  , patch :: Patch a
-  , args :: DiffArgs a
+  , patch :: Patch ctx a
+  , args :: DiffArgs ctx a
   , st :: Diff2State
   }
 
-diff2 :: forall a. EFn.EffectFn1 (Diff2Args a) (Diff2Args a)
+diff2 :: forall ctx a. EFn.EffectFn1 (Diff2Args ctx a) (Diff2Args ctx a)
 diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
   if st.startN <= st.endN then do
     let tupleN = Fn.runFn2 byIdx args.nexts st.startN
@@ -174,7 +178,7 @@ diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
     mIdxC <- EFn.runEffectFn2 MO.get nameN st.ntoi
     case mIdxC of
       Nothing -> do
-        EFn.runEffectFn1 patch $ Create { next: tupleN }
+        EFn.runEffectFn2 patch.create args.context tupleN
         pure args2
           { st = st
               { startN = st.startN + 1
@@ -182,10 +186,10 @@ diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
           }
       Just idxC -> do
         let tupleC = Fn.runFn2 byIdx args.currents idxC
-        EFn.runEffectFn1 patch $ Update
-          { current: tupleC
-          , next: tupleN
-          }
+        EFn.runEffectFn3 patch.update
+          args.context
+          tupleC
+          tupleN
         EFn.runEffectFn2 MO.del nameN st.ntoi
         pure args2
           { st = st { startN = st.startN + 1 }
@@ -195,14 +199,14 @@ diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
     EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
       idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
       let tupleC = Fn.runFn2 byIdx args.currents idxC
-      EFn.runEffectFn1 patch $ Delete { current: tupleC }
+      EFn.runEffectFn2 patch.delete args.context tupleC
     pure args2 { done = true }
   else
     pure args2 { done = true }
 
 nameToIdx
-  :: forall a
-   . EFn.EffectFn1 (Diff1Args a) (MObject Int)
+  :: forall ctx a
+   . EFn.EffectFn1 (Diff1Args ctx a) (MObject Int)
 nameToIdx = EFn.mkEffectFn1 \{ args, st } ->
   if st.startC > st.endC
     then MO.new
