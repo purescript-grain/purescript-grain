@@ -247,9 +247,9 @@ In a component, you can declare that you use state with API like React Hooks.
   - Listen a partial state, then return it.
   - If the partial state is changed, the component will be rerendered.
 - `useUpdater`
-  - Get an updater of a partial state.
+  - Get the updater for any state.
 - `useFinder`
-  - Get a finder of a partial state.
+  - Get the finder for any state.
   - This is useful when you want a state in a event handler only.
 
 And **you can use some typeclasses to declare state, where you want, and at any level of granularity**.
@@ -260,9 +260,9 @@ If you want to use local state, you can create a instance of `LocalGrain`.
 It needs `initialState` and `typeRefOf`.
 
 `TypeRef` is used as state key of store.
-You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
+You can construct `TypeRef` with `fromConstructor` and any constructor function of a state type.
 
-Then you can call `useValue` or `useUpdater` with `LProxy` with a your state type.
+Then you can use state hooks with `LProxy` with a state type.
 
 ```purescript
 import Prelude
@@ -279,8 +279,9 @@ instance localGrainCount :: LocalGrain Count where
 view :: VNode
 view = H.component do
   Count count <- useValue (LProxy :: _ Count)
-  updateCount <- useUpdater (LProxy :: _ Count)
-  let increment = updateCount (\(Count c) -> Count $ c + 1)
+  update <- useUpdater
+  let increment = update (LProxy :: _ Count)
+        (\(Count c) -> Count $ c + 1)
   pure $ H.div
     # H.onClick (const increment)
     # H.kids [ H.text $ show count ]
@@ -292,9 +293,9 @@ If you want to use global state, you can create a instance of `GlobalGrain`.
 It needs `initialState` and `typeRefOf`.
 
 `TypeRef` is used as state key of store.
-You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
+You can construct `TypeRef` with `fromConstructor` and any constructor function of a state type.
 
-Then you can call `useValue` or `useUpdater` with `GProxy` with a your state type.
+Then you can use state hooks with `GProxy` with a state type.
 
 State of `GlobalGrain` is registered in global store, therefore, the state isn't deleted when component is deleted, and you can get/update state regardless of component layers.
 
@@ -313,8 +314,9 @@ instance globalGrainCount :: GlobalGrain Count where
 view :: VNode
 view = H.component do
   Count count <- useValue (GProxy :: _ Count)
-  updateCount <- useUpdater (GProxy :: _ Count)
-  let increment = updateCount (\(Count c) -> Count $ c + 1)
+  update <- useUpdater
+  let increment = update (GProxy :: _ Count)
+        (\(Count c) -> Count $ c + 1)
   pure $ H.div
     # H.onClick (const increment)
     # H.kids [ H.text $ show count ]
@@ -326,9 +328,9 @@ If you want to manage global state for each dynamic items, you can create a inst
 It needs `initialState` and `typeRefOf`.
 
 `TypeRef` and a key of `KGProxy` are used as state key of store.
-You can construct `TypeRef` with `fromConstructor` and any constructor function of a your state type.
+You can construct `TypeRef` with `fromConstructor` and any constructor function of a state type.
 
-Then you can call `useValue` or `useUpdater` with `KGProxy` with a key and a your state type.
+Then you can use state hooks with `KGProxy` with a key and a state type.
 
 State of `KeyedGlobalGrain` is registered in global store, therefore, the state isn't deleted when component is deleted, and you can get/update state regardless of component layers.
 
@@ -353,8 +355,9 @@ instance keyedGlobalGrainItem :: KeyedGlobalGrain Item where
 view :: String -> VNode
 view key = H.component do
   Item item <- useValue (KGProxy key :: _ Item)
-  updateItem <- useUpdater (KGProxy key :: _ Item)
-  let onClick = updateItem (\(Item i) -> Item $ i { clicked = true })
+  update <- useUpdater
+  let onClick = update (KGProxy key :: _ Item)
+        (\(Item i) -> Item $ i { clicked = true })
   pure $ H.div
     # H.onClick (const onClick)
     # H.kids [ H.text $ item.name <> if item.clicked then " clicked" else "" ]
