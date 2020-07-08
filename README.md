@@ -29,6 +29,8 @@ $ spago install grain
 
 From `v0.4.0`, purescript-grain's performance is equivalent to popular JavaScript UI libraries like React.
 
+The project for benchmark is [here](https://github.com/purescript-grain/js-framework-benchmark/tree/master/frameworks/keyed/grain).
+
 <img src="benchmark.png?raw=true" alt="benchmark" />
 
 ## LICENSE
