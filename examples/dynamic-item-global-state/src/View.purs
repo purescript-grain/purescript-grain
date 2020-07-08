@@ -15,9 +15,10 @@ import View.Item as Item
 view :: VNode
 view = H.component do
   ItemIds itemIds <- useValue (GProxy :: _ ItemIds)
-  updateItemIds <- useUpdater (GProxy :: _ ItemIds)
+  update <- useUpdater
 
-  let addItem = updateItemIds $ over ItemIds \ids -> snoc ids $ (fromMaybe 0 $ last ids) + 1
+  let addItem = update (GProxy :: _ ItemIds)
+        $ over ItemIds \ids -> snoc ids $ (fromMaybe 0 $ last ids) + 1
 
   pure $ H.div # H.kids
     [ H.button # H.onClick (const addItem) # H.kids [ H.text "ADD" ]
