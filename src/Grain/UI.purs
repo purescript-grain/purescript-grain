@@ -269,25 +269,17 @@ useValue proxy = Render do
     query.listenValue proxy
     query.selectValue proxy
 
--- | Get a finder of a state.
-useFinder
-  :: forall p a
-   . Grain p a
-  => p a
-  -> Render (Effect a)
-useFinder proxy = Render do
+-- | Get the finder for any state.
+useFinder :: Render (forall p a. Grain p a => p a -> Effect a)
+useFinder = Render do
   QueryBox query <- ask
-  pure $ query.selectValue proxy
+  pure $ unsafeCoerce query.selectValue
 
--- | Get an updater of a state.
-useUpdater
-  :: forall p a
-   . Grain p a
-  => p a
-  -> Render ((a -> a) -> Effect Unit)
-useUpdater proxy = Render do
+-- | Get the updater for any state.
+useUpdater :: Render (forall p a. Grain p a => p a -> (a -> a) -> Effect Unit)
+useUpdater = Render do
   QueryBox query <- ask
-  pure $ query.updateValue proxy
+  pure $ unsafeCoerce query.updateValue
 
 -- | Get portal function.
 usePortal :: Effect Node -> Render (VNode -> VNode)
