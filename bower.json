@@ -14,7 +14,6 @@
         "output"
     ],
     "dependencies": {
-        "purescript-unsafe-reference": "^v3.0.1",
         "purescript-web-html": "^v2.3.0"
     }
 }
