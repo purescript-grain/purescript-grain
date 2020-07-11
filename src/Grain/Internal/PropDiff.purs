@@ -186,9 +186,8 @@ diff2 = EFn.mkEffectFn1 \{ patch, args, st } -> do
               tupleN
             EFn.runEffectFn2 MO.del nameN st.ntoi
 
-  ns <- EFn.runEffectFn1 MO.keys st.ntoi
-  EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
-    idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
+  is <- EFn.runEffectFn1 MO.values st.ntoi
+  EFn.runEffectFn2 foreachE is $ EFn.mkEffectFn1 \idxC -> do
     let tupleC = Fn.runFn2 byIdx args.currents idxC
     EFn.runEffectFn2 patch.delete args.context tupleC
 
