@@ -68,9 +68,8 @@ diff = EFn.mkEffectFn2 \patch args -> do
             }
         }
       ntoi <- EFn.runEffectFn1 nameToIdx args1
-      void $ EFn.runEffectFn2 tailRecE diff2
-        { done: false
-        , patch
+      EFn.runEffectFn1 diff2
+        { patch
         , args
         , st:
             { startN: args1.st.startN
@@ -164,45 +163,34 @@ type Diff2State =
   }
 
 type Diff2Args ctx a =
-  { done :: Boolean
-  , patch :: Patch ctx a
+  { patch :: Patch ctx a
   , args :: DiffArgs ctx a
   , st :: Diff2State
   }
 
-diff2 :: forall ctx a. EFn.EffectFn1 (Diff2Args ctx a) (Diff2Args ctx a)
-diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
-  if st.startN <= st.endN then do
-    let tupleN = Fn.runFn2 byIdx args.nexts st.startN
-        nameN = fst tupleN
-    mIdxC <- EFn.runEffectFn2 MO.get nameN st.ntoi
-    case mIdxC of
-      Nothing -> do
-        EFn.runEffectFn2 patch.create args.context tupleN
-        pure args2
-          { st = st
-              { startN = st.startN + 1
-              }
-          }
-      Just idxC -> do
-        let tupleC = Fn.runFn2 byIdx args.currents idxC
-        EFn.runEffectFn3 patch.update
-          args.context
-          tupleC
-          tupleN
-        EFn.runEffectFn2 MO.del nameN st.ntoi
-        pure args2
-          { st = st { startN = st.startN + 1 }
-          }
-  else if MO.unsafeSize st.ntoi > 0 then do
-    ns <- EFn.runEffectFn1 MO.keys st.ntoi
-    EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
-      idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
-      let tupleC = Fn.runFn2 byIdx args.currents idxC
-      EFn.runEffectFn2 patch.delete args.context tupleC
-    pure args2 { done = true }
-  else
-    pure args2 { done = true }
+diff2 :: forall ctx a. EFn.EffectFn1 (Diff2Args ctx a) Unit
+diff2 = EFn.mkEffectFn1 \{ patch, args, st } -> do
+  EFn.runEffectFn3 forE st.startN (st.endN + 1)
+    $ EFn.mkEffectFn1 \idx -> do
+        let tupleN = Fn.runFn2 byIdx args.nexts idx
+            nameN = fst tupleN
+        mIdxC <- EFn.runEffectFn2 MO.get nameN st.ntoi
+        case mIdxC of
+          Nothing ->
+            EFn.runEffectFn2 patch.create args.context tupleN
+          Just idxC -> do
+            let tupleC = Fn.runFn2 byIdx args.currents idxC
+            EFn.runEffectFn3 patch.update
+              args.context
+              tupleC
+              tupleN
+            EFn.runEffectFn2 MO.del nameN st.ntoi
+
+  ns <- EFn.runEffectFn1 MO.keys st.ntoi
+  EFn.runEffectFn2 foreachE ns $ EFn.mkEffectFn1 \nameC -> do
+    idxC <- EFn.runEffectFn2 MO.unsafeGet nameC st.ntoi
+    let tupleC = Fn.runFn2 byIdx args.currents idxC
+    EFn.runEffectFn2 patch.delete args.context tupleC
 
 nameToIdx
   :: forall ctx a

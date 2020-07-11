@@ -3,7 +3,6 @@ module Grain.Internal.MObject
   , new
   , keys
   , values
-  , unsafeSize
   , has
   , get
   , set
@@ -24,7 +23,6 @@ foreign import new :: forall a. Effect (MObject a)
 
 foreign import keys :: forall a. EFn.EffectFn1 (MObject a) (Array String)
 foreign import values :: forall a. EFn.EffectFn1 (MObject a) (Array a)
-foreign import unsafeSize :: forall a. MObject a -> Int
 foreign import has :: forall a. EFn.EffectFn2 String (MObject a) Boolean
 
 get ::  forall a. EFn.EffectFn2 String (MObject a) (Maybe a)

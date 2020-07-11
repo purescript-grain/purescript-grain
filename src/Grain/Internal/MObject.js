@@ -12,10 +12,6 @@ exports.values = function(o) {
   return Object.values(o);
 }
 
-exports.unsafeSize = function(o) {
-  return Object.keys(o).length;
-}
-
 exports.has = function(k, o) {
   return !!o[k];
 }

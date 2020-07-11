@@ -91,9 +91,8 @@ diff = EFn.mkEffectFn2 \patch args -> do
             }
         }
       ktoi <- EFn.runEffectFn1 keyToIdx args1
-      void $ EFn.runEffectFn2 tailRecE diff2
-        { done: false
-        , patch
+      EFn.runEffectFn1 diff2
+        { patch
         , args
         , st:
             { startN: args1.st.startN
@@ -201,57 +200,46 @@ type Diff2State =
   }
 
 type Diff2Args ctx p c =
-  { done :: Boolean
-  , patch :: Patch ctx p c
+  { patch :: Patch ctx p c
   , args :: DiffArgs ctx p c
   , st :: Diff2State
   }
 
-diff2 :: forall ctx p c. EFn.EffectFn1 (Diff2Args ctx p c) (Diff2Args ctx p c)
-diff2 = EFn.mkEffectFn1 \args2@{ patch, args, st } ->
-  if st.startN <= st.endN then do
-    let vnodeN = Fn.runFn2 byIdx args.nexts st.startN
-        keyN = Fn.runFn2 patch.getKey st.startN vnodeN
-    mIdxC <- EFn.runEffectFn2 MO.get keyN st.ktoi
-    case mIdxC of
-      Nothing -> do
-        EFn.runEffectFn5 patch.create
-          args.context
-          args.parentNode
-          keyN
-          st.startN
-          vnodeN
-        pure args2
-          { st = st
-              { startN = st.startN + 1
-              }
-          }
-      Just idxC -> do
-        let vnodeC = Fn.runFn2 byIdx args.currents idxC
-        EFn.runEffectFn6 patch.move
-          args.context
-          args.parentNode
-          keyN
-          st.startN
-          vnodeC
-          vnodeN
-        EFn.runEffectFn2 MO.del keyN st.ktoi
-        pure args2
-          { st = st { startN = st.startN + 1 }
-          }
-  else if MO.unsafeSize st.ktoi > 0 then do
-    ks <- EFn.runEffectFn1 MO.keys st.ktoi
-    EFn.runEffectFn2 foreachE ks $ EFn.mkEffectFn1 \keyC -> do
-      idxC <- EFn.runEffectFn2 MO.unsafeGet keyC st.ktoi
-      let vnodeC = Fn.runFn2 byIdx args.currents idxC
-      EFn.runEffectFn4 patch.delete
-        args.context
-        args.parentNode
-        keyC
-        vnodeC
-    pure args2 { done = true }
-  else
-    pure args2 { done = true }
+diff2 :: forall ctx p c. EFn.EffectFn1 (Diff2Args ctx p c) Unit
+diff2 = EFn.mkEffectFn1 \{ patch, args, st } -> do
+  EFn.runEffectFn3 forE st.startN (st.endN + 1)
+    $ EFn.mkEffectFn1 \idx -> do
+        let vnodeN = Fn.runFn2 byIdx args.nexts idx
+            keyN = Fn.runFn2 patch.getKey idx vnodeN
+        mIdxC <- EFn.runEffectFn2 MO.get keyN st.ktoi
+        case mIdxC of
+          Nothing ->
+            EFn.runEffectFn5 patch.create
+              args.context
+              args.parentNode
+              keyN
+              idx
+              vnodeN
+          Just idxC -> do
+            let vnodeC = Fn.runFn2 byIdx args.currents idxC
+            EFn.runEffectFn6 patch.move
+              args.context
+              args.parentNode
+              keyN
+              idx
+              vnodeC
+              vnodeN
+            EFn.runEffectFn2 MO.del keyN st.ktoi
+
+  ks <- EFn.runEffectFn1 MO.keys st.ktoi
+  EFn.runEffectFn2 foreachE ks $ EFn.mkEffectFn1 \keyC -> do
+    idxC <- EFn.runEffectFn2 MO.unsafeGet keyC st.ktoi
+    let vnodeC = Fn.runFn2 byIdx args.currents idxC
+    EFn.runEffectFn4 patch.delete
+      args.context
+      args.parentNode
+      keyC
+      vnodeC
 
 keyToIdx
   :: forall ctx p c
