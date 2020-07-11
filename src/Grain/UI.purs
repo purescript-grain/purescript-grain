@@ -72,9 +72,9 @@ data VElement
       , handlers :: Handlers
       , children :: Array VNode
       , specialProps :: SpecialProps
-      , didCreate :: Element -> Effect Unit
-      , didUpdate :: Element -> Effect Unit
-      , didDelete :: Element -> Effect Unit
+      , didCreate :: Maybe (Element -> Effect Unit)
+      , didUpdate :: Maybe (Element -> Effect Unit)
+      , didDelete :: Maybe (Element -> Effect Unit)
       }
   | VComponent
       { fingerprint :: Maybe String
@@ -115,9 +115,9 @@ element tagName = VNode Nothing $ VElement
       { css: Nothing
       , className: Nothing
       }
-  , didCreate: const $ pure unit
-  , didUpdate: const $ pure unit
-  , didDelete: const $ pure unit
+  , didCreate: Nothing
+  , didUpdate: Nothing
+  , didDelete: Nothing
   }
 
 -- | Create a `VNode` of text.
@@ -205,7 +205,7 @@ didCreate
   -> VNode
   -> VNode
 didCreate handler (VNode k (VElement r)) =
-  VNode k $ VElement r { didCreate = handler }
+  VNode k $ VElement r { didCreate = Just handler }
 didCreate _ velement = velement
 
 -- | Bind `didUpdate` lifecycle.
@@ -214,7 +214,7 @@ didUpdate
   -> VNode
   -> VNode
 didUpdate handler (VNode k (VElement r)) =
-  VNode k $ VElement r { didUpdate = handler }
+  VNode k $ VElement r { didUpdate = Just handler }
 didUpdate _ velement = velement
 
 -- | Bind `didDelete` lifecycle.
@@ -223,7 +223,7 @@ didDelete
   -> VNode
   -> VNode
 didDelete handler (VNode k (VElement r)) =
-  VNode k $ VElement r { didDelete = handler }
+  VNode k $ VElement r { didDelete = Just handler }
 didDelete _ velement = velement
 
 
@@ -418,7 +418,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
           , currents: cv.children
           , nexts: nv.children
           }
-        nv.didUpdate el
+        EFn.runEffectFn2 runLifecycle nv.didUpdate el
       pure node
 
     -- Create
@@ -441,7 +441,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
         , currents: []
         , nexts: nv.children
         }
-      nv.didCreate el
+      EFn.runEffectFn2 runLifecycle nv.didCreate el
       pure node
 
     -- Delete
@@ -459,7 +459,7 @@ eval = EFn.mkEffectFn4 \context target current next -> do
         , currents: cv.children
         , nexts: []
         }
-      cv.didDelete $ unsafeCoerce node
+      EFn.runEffectFn2 runLifecycle cv.didDelete $ unsafeCoerce node
       EFn.runEffectFn2 unregisterParentNode node context.nodeRefs
       pure node
 
@@ -477,6 +477,13 @@ isDifferent = Fn.mkFn2 \c n ->
     Nothing, Nothing -> true
     Just cf, Just nf -> cf /= nf
     _, _ -> true
+
+runLifecycle
+  :: EFn.EffectFn2 (Maybe (Element -> Effect Unit)) Element Unit
+runLifecycle = EFn.mkEffectFn2 \lifecycle el ->
+  case lifecycle of
+    Nothing -> pure unit
+    Just l -> EFn.runEffectFn1 raf $ l el
 
 
 
