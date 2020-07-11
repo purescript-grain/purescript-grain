@@ -27,7 +27,7 @@ import Prelude
 
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Control.Monad.Rec.Class (class MonadRec)
-import Data.Array (snoc, take, (!!), (:))
+import Data.Array (snoc, (!!))
 import Data.Function.Uncurried as Fn
 import Data.Lazy (Lazy, defer, force)
 import Data.Maybe (Maybe(..))
@@ -40,6 +40,8 @@ import Grain.Class (class Grain, which)
 import Grain.Internal.Diff (Create, Delete, GetKey, Move, Update, Patch, diff)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
+import Grain.Internal.MArray (MArray)
+import Grain.Internal.MArray as MA
 import Grain.Internal.MMap (MMap)
 import Grain.Internal.MMap as MM
 import Grain.Internal.MObject (MObject)
@@ -489,21 +491,24 @@ runLifecycle = EFn.mkEffectFn2 \lifecycle el ->
 
 type ComponentRef = Ref
   { rendering :: Boolean
-  , unsubscribers :: Array (Effect Unit)
-  , history :: Array VElement
+  , unsubscribers :: MArray (Effect Unit)
+  , history :: MArray VElement
   , store :: Store
-  , portalHistory :: Array VNode
+  , portalHistory :: MArray VNode
   }
 
 newComponentRef :: Effect ComponentRef
 newComponentRef = do
   store <- createStore
+  unsubscribers <- MA.new
+  history <- MA.new
+  portalHistory <- MA.new
   EFn.runEffectFn1 Ref.new
     { rendering: true
-    , unsubscribers: []
-    , history: []
+    , unsubscribers
+    , history
     , store
-    , portalHistory: []
+    , portalHistory
     }
 
 evalComponent :: EFn.EffectFn4 UIContext (Maybe Node) (Render VNode) ComponentRef Node
@@ -576,14 +581,15 @@ unlockRendering = EFn.mkEffectFn1 \componentRef ->
 
 addComponentUnsubscriber :: EFn.EffectFn2 (Effect Unit) ComponentRef Unit
 addComponentUnsubscriber = EFn.mkEffectFn2 \unsubscribe componentRef -> do
-  let add r = r { unsubscribers = snoc r.unsubscribers unsubscribe }
-  EFn.runEffectFn2 Ref.modify_ add componentRef
+  { unsubscribers } <- EFn.runEffectFn1 Ref.read componentRef
+  EFn.runEffectFn2 MA.snoc unsubscribers unsubscribe
 
 addComponentHistory :: EFn.EffectFn2 VElement ComponentRef (Array VElement)
 addComponentHistory = EFn.mkEffectFn2 \velement componentRef -> do
-  let add r = r { history = take 2 $ velement : r.history }
-  { history } <- EFn.runEffectFn2 Ref.modify add componentRef
-  pure history
+  { history } <- EFn.runEffectFn1 Ref.read componentRef
+  EFn.runEffectFn2 MA.cons velement history
+  EFn.runEffectFn2 MA.cutFrom 2 history
+  pure $ MA.toArray history
 
 componentRenderingLock :: EFn.EffectFn1 ComponentRef Boolean
 componentRenderingLock = EFn.mkEffectFn1 \componentRef -> do
@@ -593,7 +599,7 @@ componentRenderingLock = EFn.mkEffectFn1 \componentRef -> do
 componentHistory :: EFn.EffectFn1 ComponentRef (Array VElement)
 componentHistory = EFn.mkEffectFn1 \componentRef -> do
   { history } <- EFn.runEffectFn1 Ref.read componentRef
-  pure history
+  pure $ MA.toArray history
 
 componentStore :: EFn.EffectFn1 ComponentRef Store
 componentStore = EFn.mkEffectFn1 \componentRef -> do
@@ -603,8 +609,8 @@ componentStore = EFn.mkEffectFn1 \componentRef -> do
 triggerUnsubscriber :: EFn.EffectFn1 ComponentRef Unit
 triggerUnsubscriber = EFn.mkEffectFn1 \componentRef -> do
   { unsubscribers } <- EFn.runEffectFn1 Ref.read componentRef
-  EFn.runEffectFn1 sequenceE unsubscribers
-  EFn.runEffectFn2 Ref.modify_ _ { unsubscribers = [] } componentRef
+  EFn.runEffectFn1 sequenceE $ MA.toArray unsubscribers
+  EFn.runEffectFn1 MA.clear unsubscribers
 
 getPortal :: Fn.Fn2 UIContext ComponentRef (Effect Node -> VNode -> VNode)
 getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
@@ -648,13 +654,14 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
 componentPortalHistory :: EFn.EffectFn1 ComponentRef (Array VNode)
 componentPortalHistory = EFn.mkEffectFn1 \componentRef -> do
   { portalHistory } <- EFn.runEffectFn1 Ref.read componentRef
-  pure portalHistory
+  pure $ MA.toArray portalHistory
 
 addPortalHistory :: EFn.EffectFn2 VNode ComponentRef (Array VNode)
 addPortalHistory = EFn.mkEffectFn2 \vnode componentRef -> do
-  let add r = r { portalHistory = take 2 $ vnode : r.portalHistory }
-  { portalHistory } <- EFn.runEffectFn2 Ref.modify add componentRef
-  pure portalHistory
+  { portalHistory } <- EFn.runEffectFn1 Ref.read componentRef
+  EFn.runEffectFn2 MA.cons vnode portalHistory
+  EFn.runEffectFn2 MA.cutFrom 2 portalHistory
+  pure $ MA.toArray portalHistory
 
 
 
