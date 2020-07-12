@@ -8,29 +8,27 @@ module Grain.Internal.Emitter
 
 import Prelude
 
-import Data.Array (filter, snoc)
 import Effect (Effect)
 import Effect.Uncurried as EFn
-import Grain.Internal.Ref (Ref, modify_, new, read)
+import Grain.Internal.MArray (MArray)
+import Grain.Internal.MArray as MA
 import Grain.Internal.Util (sequenceE)
-import Unsafe.Reference (unsafeRefEq)
 
-newtype Emitter = Emitter (Ref (Array (Effect Unit)))
+newtype Emitter = Emitter (MArray (Effect Unit))
 
 createEmitter :: Effect Emitter
 createEmitter = do
-  listenersRef <- EFn.runEffectFn1 new []
+  listenersRef <- MA.new
   pure $ Emitter listenersRef
 
 subscribe :: EFn.EffectFn2 (Effect Unit) Emitter Unit
 subscribe = EFn.mkEffectFn2 \listener (Emitter listenersRef) ->
-  EFn.runEffectFn2 modify_ (_ `snoc` listener) listenersRef
+  EFn.runEffectFn2 MA.snoc listenersRef listener
 
 unsubscribe :: EFn.EffectFn2 (Effect Unit) Emitter Unit
 unsubscribe = EFn.mkEffectFn2 \listener (Emitter listenersRef) ->
-  EFn.runEffectFn2 modify_ (filter (not <<< unsafeRefEq listener)) listenersRef
+  EFn.runEffectFn2 MA.deleteIfEqRef listener listenersRef
 
 emit :: EFn.EffectFn1 Emitter Unit
-emit = EFn.mkEffectFn1 \(Emitter listenersRef) -> do
-  listeners <- EFn.runEffectFn1 read listenersRef
-  EFn.runEffectFn1 sequenceE listeners
+emit = EFn.mkEffectFn1 \(Emitter listenersRef) ->
+  EFn.runEffectFn1 sequenceE $ MA.toArray listenersRef
