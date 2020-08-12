@@ -1,4 +1,8 @@
-# purescript-grain
+<p align="center">
+  <img src="logo.png?raw=true" alt="grain" width="150" />
+</p>
+
+<h1 align="center">purescript-grain</h1>
 
 [![Latest release](http://img.shields.io/github/release/purescript-grain/purescript-grain.svg)](https://github.com/purescript-grain/purescript-grain/releases)
 
