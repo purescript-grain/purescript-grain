@@ -6,6 +6,7 @@
     "watch": "spago build -w -u '--strict --stash --censor-lib --is-lib=.spago'",
     "clean": "rm -rf output",
     "test": "spago -x test.dhall test -u '--strict --stash --censor-lib --is-lib=.spago'",
+    "bump-version": "LC_ALL=C.UTF-8 spago bump-version --no-dry-run",
     "pulp:publish": "pulp publish",
     "pulp:login": "pulp login"
   },
