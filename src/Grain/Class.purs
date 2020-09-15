@@ -3,7 +3,7 @@ module Grain.Class where
 import Effect (Effect)
 import Grain.Class.GProxy (class GlobalGrain, GProxy)
 import Grain.Class.GProxy as G
-import Grain.Class.KGProxy (class KeyedGlobalGrain, KGProxy(..))
+import Grain.Class.KGProxy (class KeyedGlobalGrain, KGProxy(..), stringifyKey)
 import Grain.Class.KGProxy as KG
 import Grain.Class.LProxy (class LocalGrain, LProxy)
 import Grain.Class.LProxy as L
@@ -21,10 +21,10 @@ instance grainGProxy :: GlobalGrain a => Grain GProxy a where
   keyOf _ = "__DEFAULT__"
   which _ { global } = global
 
-instance grainKGProxy :: KeyedGlobalGrain a => Grain KGProxy a where
+instance grainKGProxy :: KeyedGlobalGrain k a => Grain (KGProxy k) a where
   initialState = KG.initialState
   typeRefOf = KG.typeRefOf
-  keyOf (KGProxy key) = key
+  keyOf (KGProxy key) = stringifyKey key
   which _ { global } = global
 
 instance grainLProxy :: LocalGrain a => Grain LProxy a where
