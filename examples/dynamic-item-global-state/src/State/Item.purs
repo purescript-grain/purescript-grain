@@ -9,7 +9,7 @@ newtype Item = Item
   , clicked :: Boolean
   }
 
-instance keyGlobalGrainItem :: KeyedGlobalGrain Item where
+instance keyedGlobalGrainItem :: KeyedGlobalGrain String Item where
   initialState (KGProxy key) =
     pure $ Item
       { name: "Globally stored Item" <> key

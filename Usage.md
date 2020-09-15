@@ -345,7 +345,7 @@ newtype Item = Item
   , clicked :: Boolean
   }
 
-instance keyedGlobalGrainItem :: KeyedGlobalGrain Item where
+instance keyedGlobalGrainItem :: KeyedGlobalGrain String Item where
   initialState (KGProxy key) = pure $ Item
     { name: "Item " <> key
     , clicked: false

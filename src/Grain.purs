@@ -7,7 +7,7 @@ module Grain
   ) where
 
 import Grain.Class.GProxy (class GlobalGrain, GProxy(..))
-import Grain.Class.KGProxy (class KeyedGlobalGrain, KGProxy(..))
+import Grain.Class.KGProxy (class GrainKey, class KeyedGlobalGrain, KGProxy(..))
 import Grain.Class.LProxy (class LocalGrain, LProxy(..))
 import Grain.TypeRef (fromConstructor)
 import Grain.UI (Render, VNode, mount, useFinder, usePortal, useUpdater, useValue)
