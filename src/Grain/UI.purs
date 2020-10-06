@@ -17,8 +17,11 @@ module Grain.UI
   , Query
   , runRender
   , useValue
+  , useKeyedValue
   , useFinder
+  , useKeyedFinder
   , useUpdater
+  , useKeyedUpdater
   , usePortal
   , mount
   ) where
@@ -37,6 +40,8 @@ import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, which)
+import Grain.Class.GlobalGrain (GProxy)
+import Grain.Class.KeyedGlobalGrain (class KeyedGlobalGrain, stringifyKey)
 import Grain.Internal.Diff (Create, Delete, GetKey, Move, Update, Patch, diff)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
@@ -257,6 +262,21 @@ type Query =
 runRender :: forall a. Render a -> Query -> Effect a
 runRender (Render reader) = runReaderT reader <<< QueryBox
 
+defaultKey :: String
+defaultKey = "__DEFAULT__"
+
+useValue_
+  :: forall p a
+   . Grain p a
+  => p a
+  -> String
+  -> Render a
+useValue_ proxy rawKey = Render do
+  QueryBox query <- ask
+  liftEffect do
+    query.listenValue proxy rawKey
+    query.selectValue proxy rawKey
+
 -- | Listen a state, then return it.
 -- |
 -- | If the state is changed, the component will be rerendered.
@@ -265,11 +285,29 @@ useValue
    . Grain p a
   => p a
   -> Render a
-useValue proxy = Render do
+useValue proxy =
+  useValue_ proxy defaultKey
+
+-- | Listen a keyed global state, then return it.
+-- |
+-- | If the state is changed, the component will be rerendered.
+useKeyedValue
+  :: forall k a
+   . KeyedGlobalGrain k a
+  => GProxy a
+  -> k
+  -> Render a
+useKeyedValue proxy k =
+  useValue_ proxy $ stringifyKey k
+
+useFinder_
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render (String -> Effect a)
+useFinder_ proxy = Render do
   QueryBox query <- ask
-  liftEffect do
-    query.listenValue proxy "__DEFAULT__"
-    query.selectValue proxy "__DEFAULT__"
+  pure $ query.selectValue proxy
 
 -- | Get a finder of a state.
 useFinder
@@ -277,9 +315,28 @@ useFinder
    . Grain p a
   => p a
   -> Render (Effect a)
-useFinder proxy = Render do
+useFinder proxy = do
+  mkFinder <- useFinder_ proxy
+  pure $ mkFinder defaultKey
+
+-- | Get a finder of a keyed global state.
+useKeyedFinder
+  :: forall k a
+   . KeyedGlobalGrain k a
+  => GProxy a
+  -> Render (k -> Effect a)
+useKeyedFinder proxy = do
+  mkFinder <- useFinder_ proxy
+  pure $ mkFinder <<< stringifyKey
+
+useUpdater_
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render (String -> (a -> a) -> Effect Unit)
+useUpdater_ proxy = Render do
   QueryBox query <- ask
-  pure $ query.selectValue proxy "__DEFAULT__"
+  pure $ query.updateValue proxy
 
 -- | Get an updater of a state.
 useUpdater
@@ -287,9 +344,19 @@ useUpdater
    . Grain p a
   => p a
   -> Render ((a -> a) -> Effect Unit)
-useUpdater proxy = Render do
-  QueryBox query <- ask
-  pure $ query.updateValue proxy "__DEFAULT__"
+useUpdater proxy = do
+  mkUpdater <- useUpdater_ proxy
+  pure $ mkUpdater defaultKey
+
+-- | Get an updater of a keyed global state.
+useKeyedUpdater
+  :: forall k a
+   . KeyedGlobalGrain k a
+  => GProxy a
+  -> Render (k -> (a -> a) -> Effect Unit)
+useKeyedUpdater proxy = do
+  mkUpdater <- useUpdater_ proxy
+  pure $ mkUpdater <<< stringifyKey
 
 -- | Get portal function.
 usePortal :: Effect Node -> Render (VNode -> VNode)
