@@ -1,4 +1,4 @@
-module Grain.Class.LProxy
+module Grain.Class.LocalGrain
   ( LProxy(..)
   , class LocalGrain
   , initialState

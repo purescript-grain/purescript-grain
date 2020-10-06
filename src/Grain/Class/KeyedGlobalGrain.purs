@@ -1,19 +1,12 @@
-module Grain.Class.KGProxy
-  ( KGProxy(..)
-  , class GrainKey
+module Grain.Class.KeyedGlobalGrain
+  ( class GrainKey
   , stringifyKey
   , class KeyedGlobalGrain
-  , initialState
-  , typeRefOf
   ) where
 
 import Prelude
 
-import Effect (Effect)
-import Grain.TypeRef (TypeRef)
-
--- | A type of keyed global state proxy.
-data KGProxy k a = KGProxy k
+import Grain.Class.GlobalGrain (class GlobalGrain)
 
 -- | Representation of key type for keyed global state.
 -- |
@@ -31,6 +24,4 @@ instance grainKeyString :: GrainKey String where
 -- | The first parameter is a type of key for each item, and the second parameter is a type of item.
 -- |
 -- | `TypeRef` is used as state key internally for uniqueness.
-class (GrainKey k) <= KeyedGlobalGrain k a | a -> k where
-  initialState :: KGProxy k a -> Effect a
-  typeRefOf :: KGProxy k a -> TypeRef
+class (GrainKey k, GlobalGrain a) <= KeyedGlobalGrain k a | a -> k

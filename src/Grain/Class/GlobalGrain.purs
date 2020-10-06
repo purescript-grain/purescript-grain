@@ -1,4 +1,4 @@
-module Grain.Class.GProxy
+module Grain.Class.GlobalGrain
   ( GProxy(..)
   , class GlobalGrain
   , initialState

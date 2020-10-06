@@ -1,13 +1,13 @@
 module Grain
-  ( module Grain.Class.GProxy
-  , module Grain.Class.KGProxy
-  , module Grain.Class.LProxy
+  ( module Grain.Class.GlobalGrain
+  , module Grain.Class.KeyedGlobalGrain
+  , module Grain.Class.LocalGrain
   , module Grain.TypeRef
   , module Grain.UI
   ) where
 
-import Grain.Class.GProxy (class GlobalGrain, GProxy(..))
-import Grain.Class.KGProxy (class GrainKey, class KeyedGlobalGrain, KGProxy(..))
-import Grain.Class.LProxy (class LocalGrain, LProxy(..))
+import Grain.Class.GlobalGrain (class GlobalGrain, GProxy(..))
+import Grain.Class.KeyedGlobalGrain (class GrainKey, class KeyedGlobalGrain)
+import Grain.Class.LocalGrain (class LocalGrain, LProxy(..))
 import Grain.TypeRef (fromConstructor)
 import Grain.UI (Render, VNode, mount, useFinder, usePortal, useUpdater, useValue)
