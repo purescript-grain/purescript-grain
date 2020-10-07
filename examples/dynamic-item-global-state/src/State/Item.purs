@@ -2,7 +2,7 @@ module State.Item where
 
 import Prelude
 
-import Grain (class KeyedGlobalGrain, KGProxy(..), fromConstructor)
+import Grain (class KeyedGlobalGrain, fromConstructor)
 
 newtype Item = Item
   { name :: String
@@ -10,9 +10,9 @@ newtype Item = Item
   }
 
 instance keyedGlobalGrainItem :: KeyedGlobalGrain String Item where
-  initialState (KGProxy key) =
+  initialState _ =
     pure $ Item
-      { name: "Globally stored Item" <> key
+      { name: "Globally stored Item"
       , clicked: false
       }
   typeRefOf _ = fromConstructor Item

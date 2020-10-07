@@ -32,11 +32,11 @@ instance globalGrainNow :: GlobalGrain Now where
 
 view :: VNode
 view = H.component do
-  update <- useUpdater
+  updateNow <- useUpdater (GProxy :: _ Now)
 
   let listenNow = void $ setInterval 5000 do
         now <- nowDateTime
-        update (GProxy :: _ Now) $ const $ Now now
+        updateNow $ const $ Now now
 
   pure $ H.div # H.didCreate (const listenNow) # H.kids
     [ nowView
