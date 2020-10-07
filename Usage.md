@@ -9,6 +9,7 @@ This document explains the usage of `purescript-grain`.
   - [Element](#element)
   - [Component](#component)
     - [State](#state)
+    - [Keyed State](#keyed-state)
     - [Portal](#portal)
 - [Key](#key)
 - [Fingerprint](#fingerprint)
@@ -247,9 +248,9 @@ In a component, you can declare that you use state with API like React Hooks.
   - Listen a partial state, then return it.
   - If the partial state is changed, the component will be rerendered.
 - `useUpdater`
-  - Get the updater for any state.
+  - Get an updater of a partial state.
 - `useFinder`
-  - Get the finder for any state.
+  - Get a finder of a partial state.
   - This is useful when you want a state in a event handler only.
 
 And **you can use some typeclasses to declare state, where you want, and at any level of granularity**.
@@ -279,9 +280,8 @@ instance localGrainCount :: LocalGrain Count where
 view :: VNode
 view = H.component do
   Count count <- useValue (LProxy :: _ Count)
-  update <- useUpdater
-  let increment = update (LProxy :: _ Count)
-        (\(Count c) -> Count $ c + 1)
+  updateCount <- useUpdater (LProxy :: _ Count)
+  let increment = updateCount (\(Count c) -> Count $ c + 1)
   pure $ H.div
     # H.onClick (const increment)
     # H.kids [ H.text $ show count ]
@@ -314,30 +314,32 @@ instance globalGrainCount :: GlobalGrain Count where
 view :: VNode
 view = H.component do
   Count count <- useValue (GProxy :: _ Count)
-  update <- useUpdater
-  let increment = update (GProxy :: _ Count)
-        (\(Count c) -> Count $ c + 1)
+  updateCount <- useUpdater (GProxy :: _ Count)
+  let increment = updateCount (\(Count c) -> Count $ c + 1)
   pure $ H.div
     # H.onClick (const increment)
     # H.kids [ H.text $ show count ]
 ```
 
-##### Keyed global state example
+#### Keyed State
 
 If you want to manage global state for each dynamic items, you can create a instance of `KeyedGlobalGrain`.
 It needs `initialState` and `typeRefOf`.
 
-`TypeRef` and a key of `KGProxy` are used as state key of store.
+`TypeRef` and a key for each item are used as state key of store.
 You can construct `TypeRef` with `fromConstructor` and any constructor function of a state type.
 
-Then you can use state hooks with `KGProxy` with a key and a state type.
+And, there are state hooks for keyed global state.
+- `useKeyedValue`
+- `useKeyedUpdater`
+- `useKeyedFinder`
 
 State of `KeyedGlobalGrain` is registered in global store, therefore, the state isn't deleted when component is deleted, and you can get/update state regardless of component layers.
 
 ```purescript
 import Prelude
 
-import Grain (class KeyedGlobalGrain, KGProxy(..), VNode, fromConstructor, useUpdater, useValue)
+import Grain (class KeyedGlobalGrain, KGProxy(..), VNode, fromConstructor, useKeyedUpdater, useKeyedValue)
 import Grain.Markup as H
 
 newtype Item = Item
@@ -346,18 +348,17 @@ newtype Item = Item
   }
 
 instance keyedGlobalGrainItem :: KeyedGlobalGrain String Item where
-  initialState (KGProxy key) = pure $ Item
-    { name: "Item " <> key
+  initialState _ = pure $ Item
+    { name: "Item"
     , clicked: false
     }
   typeRefOf _ = fromConstructor Item
 
 view :: String -> VNode
 view key = H.component do
-  Item item <- useValue (KGProxy key :: _ Item)
-  update <- useUpdater
-  let onClick = update (KGProxy key :: _ Item)
-        (\(Item i) -> Item $ i { clicked = true })
+  Item item <- useKeyedValue KGProxy key
+  updateItem <- useKeyedUpdater (KGProxy :: _ Item)
+  let onClick = updateItem key (\(Item i) -> Item $ i { clicked = true })
   pure $ H.div
     # H.onClick (const onClick)
     # H.kids [ H.text $ item.name <> if item.clicked then " clicked" else "" ]
