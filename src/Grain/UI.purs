@@ -19,6 +19,9 @@ module Grain.UI
   , useValue
   , useFinder
   , useUpdater
+  , useKeyedValue
+  , useKeyedFinder
+  , useKeyedUpdater
   , usePortal
   , mount
   ) where
@@ -37,6 +40,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Uncurried as EFn
 import Grain.Class (class Grain, class NonKeyedGrain, which)
+import Grain.Class.KGProxy (class KeyedGlobalGrain, KGProxy, stringifyKey)
 import Grain.Internal.Diff (Create, Delete, GetKey, Move, Update, Patch, diff)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
@@ -320,6 +324,38 @@ useUpdater
 useUpdater proxy = do
   mkUpdater <- useUpdater' proxy
   pure $ mkUpdater defaultKey
+
+-- | Listen a keyed global state, then return it.
+-- |
+-- | If the state is changed, the component will be rerendered.
+useKeyedValue
+  :: forall k a
+   . KeyedGlobalGrain k a
+  => KGProxy k a
+  -> k
+  -> Render a
+useKeyedValue proxy k =
+  useValue' proxy $ stringifyKey k
+
+-- | Get a finder of a keyed global state.
+useKeyedFinder
+  :: forall k a
+   . KeyedGlobalGrain k a
+  => KGProxy k a
+  -> Render (k -> Effect a)
+useKeyedFinder proxy = do
+  mkFinder <- useFinder' proxy
+  pure $ mkFinder <<< stringifyKey
+
+-- | Get an updater of a keyed global state.
+useKeyedUpdater
+  :: forall k a
+   . KeyedGlobalGrain k a
+  => KGProxy k a
+  -> Render (k -> (a -> a) -> Effect Unit)
+useKeyedUpdater proxy = do
+  mkUpdater <- useUpdater' proxy
+  pure $ mkUpdater <<< stringifyKey
 
 -- | Get portal function.
 usePortal :: Effect Node -> Render (VNode -> VNode)
