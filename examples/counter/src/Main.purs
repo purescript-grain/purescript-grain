@@ -34,9 +34,9 @@ instance localGrainCount :: LocalGrain Count where
 view :: VNode
 view = H.component do
   count <- useValue (LProxy :: _ Count)
-  updateItem <- useUpdater (LProxy :: _ Count)
-  let increment = updateItem $ over Count (_ + 1)
-      decrement = updateItem $ over Count (_ - 1)
+  updateCount <- useUpdater (LProxy :: _ Count)
+  let increment = updateCount $ over Count (_ + 1)
+      decrement = updateCount $ over Count (_ - 1)
   pure $ H.div # H.css containerStyles # H.kids
     [ H.button
         # H.css buttonStyles
