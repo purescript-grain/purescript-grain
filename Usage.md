@@ -402,7 +402,7 @@ portalSample = H.component do
   pure $ portal $ H.div # H.kids [ H.text "sample" ]
 ```
 
-## Key
+## Key for Virtual DOM
 
 **This section is very important.**
 
