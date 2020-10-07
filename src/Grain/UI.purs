@@ -36,7 +36,7 @@ import Effect (Effect)
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Effect.Uncurried as EFn
-import Grain.Class (class Grain, which)
+import Grain.Class (class Grain, class NonKeyedGrain, which)
 import Grain.Internal.Diff (Create, Delete, GetKey, Move, Update, Patch, diff)
 import Grain.Internal.Element (allocElement, updateElement)
 import Grain.Internal.Handler (Handlers)
@@ -248,48 +248,78 @@ derive newtype instance monadRecRender :: MonadRec Render
 newtype QueryBox = QueryBox Query
 
 type Query =
-  { selectValue :: forall p a. Grain p a => p a -> Effect a
-  , listenValue :: forall p a. Grain p a => p a -> Effect Unit
-  , updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
+  { selectValue :: forall p a. Grain p a => p a -> String -> Effect a
+  , listenValue :: forall p a. Grain p a => p a -> String -> Effect Unit
+  , updateValue :: forall p a. Grain p a => p a -> String -> (a -> a) -> Effect Unit
   , portalVNode :: Effect Node -> VNode -> VNode
   }
 
 runRender :: forall a. Render a -> Query -> Effect a
 runRender (Render reader) = runReaderT reader <<< QueryBox
 
+defaultKey :: String
+defaultKey = "__DEFAULT__"
+
+useValue'
+  :: forall p a
+   . Grain p a
+  => p a
+  -> String
+  -> Render a
+useValue' proxy k = Render do
+  QueryBox query <- ask
+  liftEffect do
+    query.listenValue proxy k
+    query.selectValue proxy k
+
+useFinder'
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render (String -> Effect a)
+useFinder' proxy = Render do
+  QueryBox query <- ask
+  pure $ query.selectValue proxy
+
+useUpdater'
+  :: forall p a
+   . Grain p a
+  => p a
+  -> Render (String -> (a -> a) -> Effect Unit)
+useUpdater' proxy = Render do
+  QueryBox query <- ask
+  pure $ query.updateValue proxy
+
 -- | Listen a state, then return it.
 -- |
 -- | If the state is changed, the component will be rerendered.
 useValue
   :: forall p a
-   . Grain p a
+   . NonKeyedGrain p a
   => p a
   -> Render a
-useValue proxy = Render do
-  QueryBox query <- ask
-  liftEffect do
-    query.listenValue proxy
-    query.selectValue proxy
+useValue proxy =
+  useValue' proxy defaultKey
 
 -- | Get a finder of a state.
 useFinder
   :: forall p a
-   . Grain p a
+   . NonKeyedGrain p a
   => p a
   -> Render (Effect a)
-useFinder proxy = Render do
-  QueryBox query <- ask
-  pure $ query.selectValue proxy
+useFinder proxy = do
+  mkFinder <- useFinder' proxy
+  pure $ mkFinder defaultKey
 
 -- | Get an updater of a state.
 useUpdater
   :: forall p a
-   . Grain p a
+   . NonKeyedGrain p a
   => p a
   -> Render ((a -> a) -> Effect Unit)
-useUpdater proxy = Render do
-  QueryBox query <- ask
-  pure $ query.updateValue proxy
+useUpdater proxy = do
+  mkUpdater <- useUpdater' proxy
+  pure $ mkUpdater defaultKey
 
 -- | Get portal function.
 usePortal :: Effect Node -> Render (VNode -> VNode)
@@ -527,26 +557,26 @@ evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
         local <- EFn.runEffectFn1 componentStore componentRef
         pure { global: context.store, local }
 
-      listenValue :: forall p a. Grain p a => p a -> Effect Unit
-      listenValue proxy = do
+      listenValue :: forall p a. Grain p a => p a -> String -> Effect Unit
+      listenValue proxy k = do
         selection <- storeSelection
         let store = which proxy selection
-        EFn.runEffectFn3 subscribeGrain proxy evaluateRaf store
+        EFn.runEffectFn4 subscribeGrain proxy k evaluateRaf store
         EFn.runEffectFn2 addComponentUnsubscriber
-          (EFn.runEffectFn3 unsubscribeGrain proxy evaluateRaf store)
+          (EFn.runEffectFn4 unsubscribeGrain proxy k evaluateRaf store)
           componentRef
 
-      selectValue :: forall p a. Grain p a => p a -> Effect a
-      selectValue proxy = do
+      selectValue :: forall p a. Grain p a => p a -> String -> Effect a
+      selectValue proxy k = do
         selection <- storeSelection
         let store = which proxy selection
-        EFn.runEffectFn2 readGrain proxy store
+        EFn.runEffectFn3 readGrain proxy k store
 
-      updateValue :: forall p a. Grain p a => p a -> (a -> a) -> Effect Unit
-      updateValue proxy f = do
+      updateValue :: forall p a. Grain p a => p a -> String -> (a -> a) -> Effect Unit
+      updateValue proxy k f = do
         selection <- storeSelection
         let store = which proxy selection
-        EFn.runEffectFn3 updateGrain proxy f store
+        EFn.runEffectFn4 updateGrain proxy k f store
 
       portalVNode = Fn.runFn2 getPortal context componentRef
 
