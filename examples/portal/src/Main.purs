@@ -51,9 +51,9 @@ main = do
 view :: VNode
 view = H.component do
   Items items <- useValue (LProxy :: _ Items)
-  update <- useUpdater
-  let openItem item = update (LProxy :: _ Items) $ open item.id
-      closeItem item = update (LProxy :: _ Items) $ close item.id
+  updateItems <- useUpdater (LProxy :: _ Items)
+  let openItem item = updateItems $ open item.id
+      closeItem item = updateItems $ close item.id
   pure $ H.div # H.kids
     [ H.h1 # H.kids [ H.text "Portal Demo" ]
     , H.ul # H.kids
