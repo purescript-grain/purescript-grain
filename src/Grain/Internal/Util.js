@@ -55,12 +55,20 @@ exports.createElementNS = function(tag) {
   return document.createElementNS("http://www.w3.org/2000/svg", tag);
 }
 
+exports.unsafeParentNode = function(node) {
+  return node.parentNode;
+}
+
 exports.appendChild = function(node, parent) {
   return parent.appendChild(node);
 }
 
 exports.removeChild = function(node, parent) {
   parent.removeChild(node);
+}
+
+exports.replaceChild = function(newNode, oldNode, parent) {
+  parent.replaceChild(newNode, oldNode);
 }
 
 exports.putChild = function(i, node, parent) {

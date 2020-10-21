@@ -13,8 +13,10 @@ module Grain.Internal.Util
   , createTextNode
   , createElement
   , createElementNS
+  , unsafeParentNode
   , appendChild
   , removeChild
+  , replaceChild
   , putChild
   , setTextContent
   , setAny
@@ -59,8 +61,10 @@ foreign import head :: Effect Node
 foreign import createTextNode :: EFn.EffectFn1 String Text
 foreign import createElement :: EFn.EffectFn1 String Element
 foreign import createElementNS :: EFn.EffectFn1 String Element
+foreign import unsafeParentNode :: EFn.EffectFn1 Node Node
 foreign import appendChild :: EFn.EffectFn2 Node Node Node
 foreign import removeChild :: EFn.EffectFn2 Node Node Unit
+foreign import replaceChild :: EFn.EffectFn3 Node Node Node Unit
 foreign import putChild :: EFn.EffectFn3 Int Node Node Unit
 foreign import nodeIndexOf :: EFn.EffectFn1 Node Int
 foreign import setTextContent :: EFn.EffectFn2 String Node Unit

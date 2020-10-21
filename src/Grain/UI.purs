@@ -56,7 +56,7 @@ import Grain.Internal.Ref as Ref
 import Grain.Internal.SpecialProp (SpecialProps)
 import Grain.Internal.Store (Store, createStore, readGrain, subscribeGrain, unsubscribeGrain, updateGrain)
 import Grain.Internal.Styler (Styler, mountStyler)
-import Grain.Internal.Util (byIdx, createTextNode, nodeIndexOf, putChild, raf, removeChild, sequenceE, setTextContent, whenE)
+import Grain.Internal.Util (byIdx, createTextNode, nodeIndexOf, putChild, raf, removeChild, replaceChild, sequenceE, setTextContent, unsafeParentNode, whenE)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.DOM.Element (Element)
 import Web.DOM.Element as E
@@ -370,7 +370,7 @@ mount :: VNode -> Node -> Effect Unit
 mount vnode parentNode = do
   store <- createStore
   styler <- mountStyler
-  componentRefs <- MM.new
+  componentRefs <- newComponentRefs
   nodeRefs <- newNodeRefs
   EFn.runEffectFn2 registerParentNode parentNode nodeRefs
   EFn.runEffectFn2 diff (force patch)
@@ -395,7 +395,7 @@ type UIContext =
   , store :: Store
   , styler :: Styler
   , nodeRefs :: NodeRefs
-  , componentRefs :: MMap Node ComponentRef
+  , componentRefs :: ComponentRefs
   }
 
 switchToSvg :: Fn.Fn2 String UIContext UIContext
@@ -439,7 +439,7 @@ getKey = Fn.mkFn2 \idx (VNode k velement) ->
 create :: Create UIContext Node VNode
 create = EFn.mkEffectFn5
   \context parentNode nodeKey index (VNode _ next) -> do
-    node <- EFn.runEffectFn4 eval context Nothing Nothing (Just next)
+    node <- EFn.runEffectFn5 eval context nodeKey Nothing Nothing (Just next)
     EFn.runEffectFn4 registerChildNode parentNode nodeKey node context.nodeRefs
     EFn.runEffectFn3 putChild index node parentNode
 
@@ -448,7 +448,7 @@ delete = EFn.mkEffectFn4
   \context parentNode nodeKey (VNode _ current) -> do
     let ctx = switchToDeleting context
     target <- EFn.runEffectFn3 getChildNode parentNode nodeKey ctx.nodeRefs
-    node <- EFn.runEffectFn4 eval ctx target (Just current) Nothing
+    node <- EFn.runEffectFn5 eval ctx nodeKey target (Just current) Nothing
     EFn.runEffectFn2 whenE (not context.deleting) do
       EFn.runEffectFn3 unregisterChildNode parentNode nodeKey ctx.nodeRefs
       EFn.runEffectFn2 removeChild node parentNode
@@ -457,32 +457,34 @@ update :: Update UIContext Node VNode
 update = EFn.mkEffectFn5
   \context parentNode nodeKey (VNode _ current) (VNode _ next) -> do
     target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
-    void $ EFn.runEffectFn4 eval context target (Just current) (Just next)
+    void $ EFn.runEffectFn5 eval context nodeKey target (Just current) (Just next)
 
 move :: Move UIContext Node VNode
 move = EFn.mkEffectFn6
   \context parentNode nodeKey index (VNode _ current) (VNode _ next) -> do
     target <- EFn.runEffectFn3 getChildNode parentNode nodeKey context.nodeRefs
-    node <- EFn.runEffectFn4 eval context target (Just current) (Just next)
+    node <- EFn.runEffectFn5 eval context nodeKey target (Just current) (Just next)
     ni <- EFn.runEffectFn1 nodeIndexOf node
     let adjustedIdx = if ni < index then index + 1 else index
     EFn.runEffectFn3 putChild adjustedIdx node parentNode
 
 
 
-eval :: EFn.EffectFn4 UIContext (Maybe Node) (Maybe VElement) (Maybe VElement) Node
-eval = EFn.mkEffectFn4 \context target current next -> do
+eval :: EFn.EffectFn5 UIContext String (Maybe Node) (Maybe VElement) (Maybe VElement) Node
+eval = EFn.mkEffectFn5 \context nodeKey target current next -> do
   case target, current, next of
     -- Update
     Just node, Just (VText ct), Just (VText nt) -> do
       EFn.runEffectFn2 whenE (ct /= nt) do
         EFn.runEffectFn2 setTextContent nt node
       pure node
-    Just node, Just (VComponent cc), Just (VComponent nc) -> do
-      EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cc nc) do
-        componentRef <- EFn.runEffectFn2 MM.unsafeGet node context.componentRefs
-        void $ EFn.runEffectFn4 evalComponent context (Just node) nc.render componentRef
-      pure node
+    Just node, Just (VComponent cc), Just (VComponent nc) ->
+      if Fn.runFn2 isDifferent cc nc
+        then do
+          componentRef <- EFn.runEffectFn2 componentRefOf node context.componentRefs
+          EFn.runEffectFn5 evalComponent context nodeKey (Just node) nc.render componentRef
+        else
+          pure node
     Just node, Just (VElement cv), Just (VElement nv) -> do
       EFn.runEffectFn2 whenE (Fn.runFn2 isDifferent cv nv) do
         let el = unsafeCoerce node
@@ -503,8 +505,8 @@ eval = EFn.mkEffectFn4 \context target current next -> do
       pure $ T.toNode txt
     Nothing, Nothing, Just (VComponent nc) -> do
       componentRef <- newComponentRef
-      node <- EFn.runEffectFn4 evalComponent context Nothing nc.render componentRef
-      EFn.runEffectFn3 MM.set node componentRef context.componentRefs
+      node <- EFn.runEffectFn5 evalComponent context nodeKey Nothing nc.render componentRef
+      EFn.runEffectFn3 registerComponentRef node componentRef context.componentRefs
       pure node
     Nothing, Nothing, Just (VElement nv) -> do
       let ctx = Fn.runFn2 switchToSvg nv.tagName context
@@ -524,9 +526,9 @@ eval = EFn.mkEffectFn4 \context target current next -> do
     Just node, Just (VText _), Nothing ->
       pure node
     Just node, Just (VComponent _), Nothing -> do
-      componentRef <- EFn.runEffectFn2 MM.unsafeGet node context.componentRefs
-      EFn.runEffectFn3 unmountComponent context (Just node) componentRef
-      EFn.runEffectFn2 MM.del node context.componentRefs
+      componentRef <- EFn.runEffectFn2 componentRefOf node context.componentRefs
+      EFn.runEffectFn4 unmountComponent context nodeKey (Just node) componentRef
+      EFn.runEffectFn2 unregisterComponentRef node context.componentRefs
       pure node
     Just node, Just (VElement cv), Nothing -> do
       EFn.runEffectFn2 diff (force patch)
@@ -563,13 +565,14 @@ runLifecycle = EFn.mkEffectFn2 \lifecycle el ->
 
 
 
-type ComponentRef = Ref
+newtype ComponentRef = ComponentRef (Ref
   { rendering :: Boolean
   , unsubscribers :: MArray (Effect Unit)
-  , history :: MArray VElement
+  , history :: MArray VNode
   , store :: Store
   , portalHistory :: MArray VNode
-  }
+  , childRef :: Maybe ComponentRef
+  })
 
 newComponentRef :: Effect ComponentRef
 newComponentRef = do
@@ -577,16 +580,17 @@ newComponentRef = do
   unsubscribers <- MA.new
   history <- MA.new
   portalHistory <- MA.new
-  EFn.runEffectFn1 Ref.new
+  ComponentRef <$> EFn.runEffectFn1 Ref.new
     { rendering: true
     , unsubscribers
     , history
     , store
     , portalHistory
+    , childRef: Nothing
     }
 
-evalComponent :: EFn.EffectFn4 UIContext (Maybe Node) (Render VNode) ComponentRef Node
-evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
+evalComponent :: EFn.EffectFn5 UIContext String (Maybe Node) (Render VNode) ComponentRef Node
+evalComponent = EFn.mkEffectFn5 \context nodeKey target render componentRef -> do
   targetRef <- EFn.runEffectFn1 Ref.new target
 
   let storeSelection = do
@@ -619,15 +623,17 @@ evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
       evaluate = do
         EFn.runEffectFn1 unlockRendering componentRef
         EFn.runEffectFn1 triggerUnsubscriber componentRef
-        VNode _ velement <- runRender render
+        vnode <- runRender render
           { selectValue
           , listenValue
           , updateValue
           , portalVNode
           }
-        h <- EFn.runEffectFn2 addComponentHistory velement componentRef
+        h <- EFn.runEffectFn2 addComponentHistory vnode componentRef
         t <- EFn.runEffectFn1 Ref.read targetRef
-        EFn.runEffectFn4 eval context t (h !! 1) (h !! 0)
+        node <- EFn.runEffectFn6 diffComponent context nodeKey t (h !! 1) (h !! 0) componentRef
+        EFn.runEffectFn2 Ref.write (Just node) targetRef
+        pure node
 
       evaluateRaf = do
         locked <- EFn.runEffectFn1 componentRenderingLock componentRef
@@ -635,54 +641,109 @@ evalComponent = EFn.mkEffectFn4 \context target render componentRef -> do
           EFn.runEffectFn1 lockRendering componentRef
           EFn.runEffectFn1 raf (void evaluate)
 
-  node <- evaluate
-  EFn.runEffectFn2 Ref.write (Just node) targetRef
-  pure node
+  evaluate
 
-unmountComponent :: EFn.EffectFn3 UIContext (Maybe Node) ComponentRef Unit
-unmountComponent = EFn.mkEffectFn3 \context target componentRef -> do
+unmountComponent :: EFn.EffectFn4 UIContext String (Maybe Node) ComponentRef Unit
+unmountComponent = EFn.mkEffectFn4 \context nodeKey target componentRef -> do
   EFn.runEffectFn1 triggerUnsubscriber componentRef
   h <- EFn.runEffectFn1 componentHistory componentRef
-  void $ EFn.runEffectFn4 eval context target (h !! 0) Nothing
+  void $ EFn.runEffectFn6 diffComponent context nodeKey target (h !! 0) Nothing componentRef
+
+diffComponent :: EFn.EffectFn6 UIContext String (Maybe Node) (Maybe VNode) (Maybe VNode) ComponentRef Node
+diffComponent = EFn.mkEffectFn6 \context nodeKey target current next componentRef -> do
+  maybeChildRef <- EFn.runEffectFn1 componentChildRef componentRef
+  case maybeChildRef, target, current, next of
+    -- Update
+    _, Just node, Just current_, Just next_
+      -- NOTE: index number used by getKey is 0 as dummy
+      | Fn.runFn2 getKey 0 current_ == Fn.runFn2 getKey 0 next_ ->
+          case maybeChildRef, current_, next_ of
+            Just childRef, VNode _ (VComponent _), VNode _ (VComponent nc) ->
+              EFn.runEffectFn5 evalComponent context nodeKey (Just node) nc.render childRef
+            Nothing, VNode _ current', VNode _ next' ->
+              EFn.runEffectFn5 eval context nodeKey (Just node) (Just current') (Just next')
+            _, _, _ ->
+              throw "Renderer can't evaluate vnodes."
+      | otherwise -> do
+          oldNode <- EFn.runEffectFn6 diffComponent context nodeKey target current Nothing componentRef
+          newNode <- EFn.runEffectFn6 diffComponent context nodeKey Nothing Nothing next componentRef
+          EFn.runEffectFn3 replaceComponentRefNode newNode oldNode context.componentRefs
+          parent <- EFn.runEffectFn1 unsafeParentNode oldNode
+          EFn.runEffectFn4 registerChildNode parent nodeKey newNode context.nodeRefs
+          EFn.runEffectFn3 replaceChild newNode oldNode parent
+          pure newNode
+
+    -- Create
+    Nothing, Nothing, Nothing, Just (VNode _ (VComponent nc)) -> do
+      childRef <- EFn.runEffectFn1 newChildRef componentRef
+      EFn.runEffectFn5 evalComponent context nodeKey Nothing nc.render childRef
+    Nothing, Nothing, Nothing, Just (VNode _ next') ->
+      EFn.runEffectFn5 eval context nodeKey Nothing Nothing (Just next')
+
+    -- Delete
+    Just childRef, Just node, Just (VNode _ (VComponent _)), Nothing -> do
+      EFn.runEffectFn1 deleteChildRef componentRef
+      EFn.runEffectFn4 unmountComponent context nodeKey (Just node) childRef
+      pure node
+    Nothing, Just node, Just (VNode _ current'), Nothing ->
+      EFn.runEffectFn5 eval context nodeKey (Just node) (Just current') Nothing
+
+    _, _, _, _ ->
+      throw "Renderer can't evaluate vnodes."
+
+componentChildRef :: EFn.EffectFn1 ComponentRef (Maybe ComponentRef)
+componentChildRef = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  { childRef } <- EFn.runEffectFn1 Ref.read ref
+  pure childRef
+
+newChildRef :: EFn.EffectFn1 ComponentRef ComponentRef
+newChildRef = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  childRef <- newComponentRef
+  EFn.runEffectFn2 Ref.modify_ _ { childRef = Just childRef } ref
+  pure childRef
+
+deleteChildRef :: EFn.EffectFn1 ComponentRef Unit
+deleteChildRef = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  EFn.runEffectFn2 Ref.modify_ _ { childRef = Nothing } ref
 
 lockRendering :: EFn.EffectFn1 ComponentRef Unit
-lockRendering = EFn.mkEffectFn1 \componentRef ->
-  EFn.runEffectFn2 Ref.modify_ _ { rendering = true } componentRef
+lockRendering = EFn.mkEffectFn1 \(ComponentRef ref) ->
+  EFn.runEffectFn2 Ref.modify_ _ { rendering = true } ref
 
 unlockRendering :: EFn.EffectFn1 ComponentRef Unit
-unlockRendering = EFn.mkEffectFn1 \componentRef ->
-  EFn.runEffectFn2 Ref.modify_ _ { rendering = false } componentRef
+unlockRendering = EFn.mkEffectFn1 \(ComponentRef ref) ->
+  EFn.runEffectFn2 Ref.modify_ _ { rendering = false } ref
 
 addComponentUnsubscriber :: EFn.EffectFn2 (Effect Unit) ComponentRef Unit
-addComponentUnsubscriber = EFn.mkEffectFn2 \unsubscribe componentRef -> do
-  { unsubscribers } <- EFn.runEffectFn1 Ref.read componentRef
+addComponentUnsubscriber = EFn.mkEffectFn2 \unsubscribe (ComponentRef ref) -> do
+  { unsubscribers } <- EFn.runEffectFn1 Ref.read ref
   EFn.runEffectFn2 MA.snoc unsubscribers unsubscribe
 
-addComponentHistory :: EFn.EffectFn2 VElement ComponentRef (Array VElement)
-addComponentHistory = EFn.mkEffectFn2 \velement componentRef -> do
-  { history } <- EFn.runEffectFn1 Ref.read componentRef
-  EFn.runEffectFn2 MA.cons velement history
+addComponentHistory :: EFn.EffectFn2 VNode ComponentRef (Array VNode)
+addComponentHistory = EFn.mkEffectFn2 \vnode (ComponentRef ref) -> do
+  { history } <- EFn.runEffectFn1 Ref.read ref
+  EFn.runEffectFn2 MA.cons vnode history
   EFn.runEffectFn2 MA.cutFrom 2 history
   pure $ MA.toArray history
 
 componentRenderingLock :: EFn.EffectFn1 ComponentRef Boolean
-componentRenderingLock = EFn.mkEffectFn1 \componentRef -> do
-  { rendering } <- EFn.runEffectFn1 Ref.read componentRef
+componentRenderingLock = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  { rendering } <- EFn.runEffectFn1 Ref.read ref
   pure rendering
 
-componentHistory :: EFn.EffectFn1 ComponentRef (Array VElement)
-componentHistory = EFn.mkEffectFn1 \componentRef -> do
-  { history } <- EFn.runEffectFn1 Ref.read componentRef
+componentHistory :: EFn.EffectFn1 ComponentRef (Array VNode)
+componentHistory = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  { history } <- EFn.runEffectFn1 Ref.read ref
   pure $ MA.toArray history
 
 componentStore :: EFn.EffectFn1 ComponentRef Store
-componentStore = EFn.mkEffectFn1 \componentRef -> do
-  { store } <- EFn.runEffectFn1 Ref.read componentRef
+componentStore = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  { store } <- EFn.runEffectFn1 Ref.read ref
   pure store
 
 triggerUnsubscriber :: EFn.EffectFn1 ComponentRef Unit
-triggerUnsubscriber = EFn.mkEffectFn1 \componentRef -> do
-  { unsubscribers } <- EFn.runEffectFn1 Ref.read componentRef
+triggerUnsubscriber = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  { unsubscribers } <- EFn.runEffectFn1 Ref.read ref
   EFn.runEffectFn1 sequenceE $ MA.toArray unsubscribers
   EFn.runEffectFn1 MA.clear unsubscribers
 
@@ -726,16 +787,38 @@ getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
         # didDelete (const deletePortal)
 
 componentPortalHistory :: EFn.EffectFn1 ComponentRef (Array VNode)
-componentPortalHistory = EFn.mkEffectFn1 \componentRef -> do
-  { portalHistory } <- EFn.runEffectFn1 Ref.read componentRef
+componentPortalHistory = EFn.mkEffectFn1 \(ComponentRef ref) -> do
+  { portalHistory } <- EFn.runEffectFn1 Ref.read ref
   pure $ MA.toArray portalHistory
 
 addPortalHistory :: EFn.EffectFn2 VNode ComponentRef (Array VNode)
-addPortalHistory = EFn.mkEffectFn2 \vnode componentRef -> do
-  { portalHistory } <- EFn.runEffectFn1 Ref.read componentRef
+addPortalHistory = EFn.mkEffectFn2 \vnode (ComponentRef ref) -> do
+  { portalHistory } <- EFn.runEffectFn1 Ref.read ref
   EFn.runEffectFn2 MA.cons vnode portalHistory
   EFn.runEffectFn2 MA.cutFrom 2 portalHistory
   pure $ MA.toArray portalHistory
+
+
+
+type ComponentRefs = MMap Node ComponentRef
+
+newComponentRefs :: Effect ComponentRefs
+newComponentRefs = MM.new
+
+componentRefOf :: EFn.EffectFn2 Node ComponentRefs ComponentRef
+componentRefOf = MM.unsafeGet
+
+registerComponentRef :: EFn.EffectFn3 Node ComponentRef ComponentRefs Unit
+registerComponentRef = MM.set
+
+unregisterComponentRef :: EFn.EffectFn2 Node ComponentRefs Unit
+unregisterComponentRef = MM.del
+
+replaceComponentRefNode :: EFn.EffectFn3 Node Node ComponentRefs Unit
+replaceComponentRefNode = EFn.mkEffectFn3 \newNode oldNode componentRefs -> do
+  componentRef <- EFn.runEffectFn2 componentRefOf oldNode componentRefs
+  EFn.runEffectFn2 unregisterComponentRef oldNode componentRefs
+  EFn.runEffectFn3 registerComponentRef newNode componentRef componentRefs
 
 
 
