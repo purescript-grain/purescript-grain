@@ -9,6 +9,7 @@ import Effect (Effect)
 import Grain.TypeRef (TypeRef)
 
 -- | A type of global state proxy.
+data GProxy :: Type -> Type
 data GProxy a = GProxy
 
 -- | Representation of a partial state of application state.

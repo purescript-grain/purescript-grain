@@ -14,6 +14,6 @@
         "output"
     ],
     "dependencies": {
-        "purescript-web-html": "^v2.3.0"
+        "purescript-web-html": "^v3.0.1"
     }
 }

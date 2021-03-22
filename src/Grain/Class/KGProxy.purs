@@ -13,6 +13,7 @@ import Effect (Effect)
 import Grain.TypeRef (TypeRef)
 
 -- | A type of keyed global state proxy.
+data KGProxy :: Type -> Type -> Type
 data KGProxy k a = KGProxy
 
 -- | Representation of key type for keyed global state.

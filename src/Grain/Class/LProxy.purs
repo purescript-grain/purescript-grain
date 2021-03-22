@@ -9,6 +9,7 @@ import Effect (Effect)
 import Grain.TypeRef (TypeRef)
 
 -- | A type of component-local state proxy.
+data LProxy :: Type -> Type
 data LProxy a = LProxy
 
 -- | Representation of a component-local state.
