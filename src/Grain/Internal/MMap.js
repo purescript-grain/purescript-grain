@@ -1,21 +1,23 @@
 'use strict';
 
-exports.new = function() {
+const newImpl = () => {
   return new Map();
-}
+};
 
-exports.getImpl = function(k, m) {
+export { newImpl as new };
+
+export function getImpl(k, m) {
   return m.get(k);
 }
 
-exports.set = function(k, v, m) {
+export function set(k, v, m) {
   m.set(k, v);
 }
 
-exports.del = function(k, m) {
+export function del(k, m) {
   m.delete(k);
 }
 
-exports.unsafeGet = function(k, m) {
+export function unsafeGet(k, m) {
   return m.get(k);
 }

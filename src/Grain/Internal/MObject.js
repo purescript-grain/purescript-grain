@@ -1,33 +1,35 @@
 'use strict';
 
-exports.new = function() {
+const newImpl = () => {
   return {};
-}
+};
 
-exports.keys = function(o) {
+export { newImpl as new };
+
+export function keys(o) {
   return Object.keys(o);
 }
 
-exports.values = function(o) {
+export function values(o) {
   return Object.values(o);
 }
 
-exports.has = function(k, o) {
+export function has(k, o) {
   return !!o[k];
 }
 
-exports.getImpl = function(k, o) {
+export function getImpl(k, o) {
   return o[k];
 }
 
-exports.set = function(k, v, o) {
+export function set(k, v, o) {
   o[k] = v;
 }
 
-exports.del = function(k, o) {
+export function del(k, o) {
   delete o[k];
 }
 
-exports.unsafeGet = function(k, o) {
+export function unsafeGet(k, o) {
   return o[k];
 }

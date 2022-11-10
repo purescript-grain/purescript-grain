@@ -1,28 +1,28 @@
 'use strict';
 
-exports.byIdx = function(xs, i) {
+export function byIdx(xs, i) {
   return xs[i];
 }
 
-exports.byIdxNullable = function(xs, i) {
+export function byIdxNullable(xs, i) {
   return xs[i];
 }
 
-exports.keyNullable = function(f, i, a) {
+export function keyNullable(f, i, a) {
   if (a === null || a === undefined) {
     return null;
   }
   return f(i, a);
 }
 
-exports.mapNullable = function(f, a) {
+export function mapNullable(f, a) {
   if (a === null || a === undefined) {
     return null;
   }
   return f(a);
 }
 
-exports.eqNullable = function(a, b) {
+export function eqNullable(a, b) {
   if (a === null || a === undefined || b === null || b === undefined) {
     return false;
   }
@@ -31,47 +31,47 @@ exports.eqNullable = function(a, b) {
 
 var readOnlyProps = { style: true, list: true, form: true, dropzone: true }
 
-exports.shouldAttribute = function(name) {
+export function shouldAttribute(name) {
   return readOnlyProps[name] === true;
 }
 
-exports.raf = function(f) {
+export function raf(f) {
   window.requestAnimationFrame(f);
 }
 
-exports.head = function() {
+export function head() {
   return document.head;
 };
 
-exports.createTextNode = function(text) {
+export function createTextNode(text) {
   return document.createTextNode(text);
 }
 
-exports.createElement = function(tag) {
+export function createElement(tag) {
   return document.createElement(tag);
 }
 
-exports.createElementNS = function(tag) {
+export function createElementNS(tag) {
   return document.createElementNS("http://www.w3.org/2000/svg", tag);
 }
 
-exports.unsafeParentNode = function(node) {
+export function unsafeParentNode(node) {
   return node.parentNode;
 }
 
-exports.appendChild = function(node, parent) {
+export function appendChild(node, parent) {
   return parent.appendChild(node);
 }
 
-exports.removeChild = function(node, parent) {
+export function removeChild(node, parent) {
   parent.removeChild(node);
 }
 
-exports.replaceChild = function(newNode, oldNode, parent) {
+export function replaceChild(newNode, oldNode, parent) {
   parent.replaceChild(newNode, oldNode);
 }
 
-exports.putChild = function(i, node, parent) {
+export function putChild(i, node, parent) {
   var target = parent.childNodes[i];
   if (target) {
     parent.insertBefore(node, target);
@@ -80,47 +80,47 @@ exports.putChild = function(i, node, parent) {
   }
 }
 
-exports.nodeIndexOf = function(node) {
+export function nodeIndexOf(node) {
   return Array.prototype.indexOf.call(node.parentNode.children, node);
 }
 
-exports.setTextContent = function(text, node) {
+export function setTextContent(text, node) {
   node.textContent = text;
 }
 
-exports.setAny = function(name, any, element) {
+export function setAny(name, any, element) {
   element[name] = any;
 }
 
-exports.setAttribute = function(name, val, element) {
+export function setAttribute(name, val, element) {
   element.setAttribute(name, val);
 }
 
-exports.removeAttribute = function(name, element) {
+export function removeAttribute(name, element) {
   element.removeAttribute(name);
 }
 
-exports.isProperty = function(name, element) {
+export function isProperty(name, element) {
   return name in element;
 }
 
-exports.isBoolean = function(name, element) {
+export function isBoolean(name, element) {
   return typeof element[name] === "boolean";
 }
 
-exports.mkEventListener = function (f) {
+export function mkEventListener (f) {
   return function(evt) {
     f(evt)();
   }
 }
 
-exports.whenE = function(bool, f) {
+export function whenE(bool, f) {
   if (bool) {
     f();
   }
 }
 
-exports.forE = function(lo, hi, f) {
+export function forE(lo, hi, f) {
   var i = lo;
 
   while (i < hi) {
@@ -129,7 +129,7 @@ exports.forE = function(lo, hi, f) {
   }
 }
 
-exports.foreachE = function(xs, f) {
+export function foreachE(xs, f) {
   var i = 0;
 
   while (i < xs.length) {
@@ -138,7 +138,7 @@ exports.foreachE = function(xs, f) {
   }
 }
 
-exports.sequenceE = function(fs) {
+export function sequenceE(fs) {
   var i = 0;
 
   while (i < fs.length) {
@@ -147,7 +147,7 @@ exports.sequenceE = function(fs) {
   }
 }
 
-exports.tailRecE = function(f, s) {
+export function tailRecE(f, s) {
   var step = s;
   while (!step.done) {
     step = f(step);

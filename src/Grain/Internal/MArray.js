@@ -1,22 +1,24 @@
 'use strict';
 
-exports.new = function() {
+const newImpl = () => {
   return [];
-}
+};
 
-exports.cons = function(x, xs) {
+export { newImpl as new };
+
+export function cons(x, xs) {
   xs.unshift(x);
 }
 
-exports.snoc = function(xs, x) {
+export function snoc(xs, x) {
   xs.push(x);
 }
 
-exports.cutFrom = function(i, xs) {
+export function cutFrom(i, xs) {
   xs.splice(i);
 }
 
-exports.deleteIfEqRef = function(x, xs) {
+export function deleteIfEqRef(x, xs) {
   var idx = xs.indexOf(x);
   if (idx < 0) {
     return;
@@ -24,6 +26,6 @@ exports.deleteIfEqRef = function(x, xs) {
   xs.splice(idx, 1);
 }
 
-exports.clear = function(xs) {
+export function clear(xs) {
   xs.splice(0);
 }

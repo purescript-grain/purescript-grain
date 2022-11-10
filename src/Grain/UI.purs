@@ -751,7 +751,7 @@ getPortal :: Fn.Fn2 UIContext ComponentRef (Effect Node -> VNode -> VNode)
 getPortal = Fn.mkFn2 \context componentRef -> \getPortalRoot vnode ->
   let createPortal = do
         parentNode <- getPortalRoot
-        h <- EFn.runEffectFn2 addPortalHistory vnode componentRef
+        void $ EFn.runEffectFn2 addPortalHistory vnode componentRef
         EFn.runEffectFn2 registerParentNode parentNode context.nodeRefs
         EFn.runEffectFn2 diff (force patch)
           { context

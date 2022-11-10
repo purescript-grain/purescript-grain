@@ -1,18 +1,20 @@
 'use strict';
 
-exports.new = function (val) {
+const newImpl = (val) => {
   return { value: val };
-}
+};
 
-exports.read = function (ref) {
+export { newImpl as new };
+
+export function read(ref) {
   return ref.value;
 }
 
-exports.modify = function (f, ref) {
+export function modify(f, ref) {
   ref.value = f(ref.value);
   return ref.value;
 }
 
-exports.write = function (val, ref) {
+export function write(val, ref) {
   ref.value = val;
 }
