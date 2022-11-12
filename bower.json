@@ -14,6 +14,22 @@
         "output"
     ],
     "dependencies": {
-        "purescript-web-html": "^v3.0.1"
+        "purescript-arrays": "^v7.1.0",
+        "purescript-effect": "^v4.0.0",
+        "purescript-exceptions": "^v6.0.0",
+        "purescript-foreign": "^v7.0.0",
+        "purescript-functions": "^v6.0.0",
+        "purescript-integers": "^v6.0.0",
+        "purescript-lazy": "^v6.0.0",
+        "purescript-maybe": "^v6.0.0",
+        "purescript-nullable": "^v6.0.0",
+        "purescript-prelude": "^v6.0.1",
+        "purescript-strings": "^v6.0.1",
+        "purescript-tailrec": "^v6.1.0",
+        "purescript-transformers": "^v6.0.0",
+        "purescript-tuples": "^v7.0.0",
+        "purescript-unsafe-coerce": "^v6.0.0",
+        "purescript-web-dom": "^v6.0.0",
+        "purescript-web-events": "^v4.0.0"
     }
 }
